@@ -1,0 +1,76 @@
+================================================================================
+Persistent User Programs: Checkpoint / Restore Framework
+================================================================================
+
+- Use file to represent fake heap for now (fopen(), then mmap())
+- Could we set a thread's stack to run on this fake heap?
+    - pthread_attr_setstack()
+
+Q: What happens if we get a CRASH while in the midst of a checkpoint? Wouldn't
+   we still be in the middle of writing to a file?
+   -----------------------------------------------------------------------------
+
+    - Solution Idea: 
+      Use two output files. The output file would have a memory layout which has
+      a starting METADATA section and a separate PAYLOAD section.
+        
+        +----------+---------+
+        | METADATA | PAYLOAD |
+        +----+-----+---------+
+             |
+             +---> this metadata contains a flag called WRITE_LOCK at some
+                   predefined offset
+
+      When we checkpoint, WRITE_LOCK is used like a semaphore or lock, in that 
+      we first set WRITE_LOCK to 0, then write all of our data, then set 
+      WRITE_LOCK back to 1. We know that we had a mid-write crash if WRITE_LOCK
+      is still zero when we try to restore that data segment.
+
+      To mitigate this issue, we should have a double-buffered output. Let's say
+      that we're just considering a single-threaded application, for now. We'd 
+      have a layout that looks like this:
+
+                             +--------------------+
+                             |                    |
+                             |  Main Application  |
+                             |                    |
+                             +--+--------------+--+
+                                |              |              (CHP = Checkpoint)
+                    CHP 1       |              |       CHP 2
+                    CHP 3 +-----+              +-----+ CHP 4
+                    CHP 5 |                          | CHP 6
+                          V                          V
+                    +----------+                +----------+
+                    | NVHeap 1 |                | NVHeap 2 |
+                    +----------+                +----------+
+
+Q: What gets checkpointed? What would we need to checkpoint, and how would we
+   restore program state after checkpointing?
+   -----------------------------------------------------------------------------
+
+    - Solution Idea: 
+      The functions setjmp(jmp_buf env) and longjmp(jmp_buf env, int val) allow
+      you to set jump locations and then jump to them - we could put the jump 
+      buffer into some form of non-volatile storage upon checkpoint, mmap the 
+      addresses so that they stay consistent between runs, and then longjmp()
+      upon restoraton.
+
+        +--------------------+
+        |                    |
+        |  Main Application  |
+        |                    |
+        +--+-----------------+
+           |
+           V                                                NVHeap
+        +----------+-----------+-----------------------------------+
+        | METADATA | jmp_buf[] | Heap -->                <-- Stack |
+        +----------+-----------+-----------------------------------+
+        ------------------> increasing addresses ------------------>
+
+      When restoring the program, we mmap() the jmp_buf[] and then jump to the 
+      currently executing point in our program. We need to make sure that the 
+      mmap() addresses are coherent with before the checkpoint as part of our
+      implementation.
+
+
+
