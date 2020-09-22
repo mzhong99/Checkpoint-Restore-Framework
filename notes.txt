@@ -1,11 +1,13 @@
 ================================================================================
-Persistent User Programs: Checkpoint / Restore Framework
+Persistent User Programs: A Checkpoint / Restore Framework
+Team SIGSYS(31): Savannah Amos and Matthew Zhong
 ================================================================================
 
 - Use file to represent fake heap for now (fopen(), then mmap())
 - Could we set a thread's stack to run on this fake heap?
     - pthread_attr_setstack()
 
+   -----------------------------------------------------------------------------
 Q: What happens if we get a CRASH while in the midst of a checkpoint? Wouldn't
    we still be in the middle of writing to a file?
    -----------------------------------------------------------------------------
@@ -40,10 +42,73 @@ Q: What happens if we get a CRASH while in the midst of a checkpoint? Wouldn't
                     CHP 3 +-----+              +-----+ CHP 4
                     CHP 5 |                          | CHP 6
                           V                          V
-                    +----------+                +----------+
-                    | NVHeap 1 |                | NVHeap 2 |
-                    +----------+                +----------+
+                    +-----------+              +-----------+
+                    | NVStore 1 |              | NVStore 2 |
+                    +-----------+              +-----------+
 
+      Checkpoints can be made to opposite buffers at each write. Only one buffer
+      is ever written to at a checkpoint. While this approach can certainly have
+      issues with many slower writes, it DOES solve the crash-on-checkpoint 
+      problem, in which we would otherwise have no way to recover from a crash 
+      while our framework was performing a background checkpoint. Observe the
+      diagram and explanation below for a brief overview on the checkpointing
+      process:
+
+          Checkpoint Operation              Volatile Memory State to NVStore
+          --------------------              --------------------------------
+
+                                             META   PAYLOAD
+                                            +------+---------------------------+
+          1. Lock the NVStore Buffer and    | WL=0 | X     X      XX       XX  |
+             write the lock into NVStore    +--+---+---------------------------+
+                                               |
+                                               V  
+                                            +------+---------------------------+
+                                    NVStore | WL=0 |                           |
+                                            +------+---------------------------+
+                                            
+                                             META   PAYLOAD
+                                            +------+---------------------------+
+           2. Deposit all updated memory    | WL=0 | X     X      XX       XX  |
+              blocks in the payload to      +------+-+-----+------++-------++--+
+              the NVStore                            |     |      ||       ||
+                                                     V     V      VV       VV
+                                            +------+---------------------------+
+                                    NVStore | WL=0 | +     +      ++       ++  |
+                                            +------+---------------------------+
+
+                                             META   PAYLOAD
+                                            +------+---------------------------+
+          3. Clear dirty markers on all     | WL=0 |                           |
+             previously written regions     +------+---------------------------+
+
+                                            +------+---------------------------+
+                                    NVStore | WL=0 | +     +      ++       ++  |
+                                            +------+---------------------------+
+
+                                             META   PAYLOAD
+                                            +------+---------------------------+
+          4. Unlock the NVStore Buffer and  | WL=1 |                           |
+             write the unlock into NVStore  +------+---------------------------+
+                                               |
+                                               V  
+                                            +------+---------------------------+
+                                    NVStore | WL=1 | +     +      ++       ++  |
+                                            +------+---------------------------+
+      
+      The theory behind why we're doing this is to be able to detect if a crash
+      which occurs mid-checkpoint has corrupted our data. We define a data 
+      corruption to have occurred when a crash occurs anywhere within steps 2 
+      and 3, inclusive.
+
+      When restoring the program state, we can observe the states of each of the
+      non-volatile stores. If both of the stores have a WRITE_LOCK of 1, we 
+      choose the store with the most recent timestamp to restore the program.
+      If one of the stores has a WRITE_LOCK of 0, however, we can safely assume
+      that a crash-on-write has occurred for that store, which means that the
+      only safe restoration point is the store with a WRITE_LOCK of 1.
+
+   -----------------------------------------------------------------------------
 Q: What gets checkpointed? What would we need to checkpoint, and how would we
    restore program state after checkpointing?
    -----------------------------------------------------------------------------
@@ -61,7 +126,7 @@ Q: What gets checkpointed? What would we need to checkpoint, and how would we
         |                    |
         +--+-----------------+
            |
-           V                                                NVHeap
+           V                                                NVStore
         +----------+-----------+-----------------------------------+
         | METADATA | jmp_buf[] | Heap -->                <-- Stack |
         +----------+-----------+-----------------------------------+
@@ -72,5 +137,26 @@ Q: What gets checkpointed? What would we need to checkpoint, and how would we
       mmap() addresses are coherent with before the checkpoint as part of our
       implementation.
 
+      As a reminder to both of us (since I needed to look this up), the function
+      signature of mmap() and munmap() does this:
 
+          void *mmap(void *addr, size_t length, int prot, int flags, int fd, 
+                     off_t offset)
+            - addr      the starting address of the new mapping
+            - length    the length of the memory segment to remap
+            - prot      the read/write privileges, as a bitwise-OR of:
+                             PROT_EXEC, PROT_READ, PROT_WRITE, PROT_NONE
+            - flags     determines whether or not updates to this region become 
+                             reflected in the file - for us, we want MAP_SHARED
+            - fd        the file descriptor which holds the output memory target
+            - offset    how many bytes are offset from the start of the file
+
+          void *munmap(void *addr, size_t length)
+            - addr      the address to unmap
+            - length    the original length of the memory segment
+
+   -----------------------------------------------------------------------------
+Q: What does the final product look like, for the user? What should our 
+   deliverables look like?
+   -----------------------------------------------------------------------------
 
