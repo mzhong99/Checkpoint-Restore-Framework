@@ -3,10 +3,6 @@ Persistent User Programs: A Checkpoint / Restore Framework
 Team SIGSYS(31): Savannah Amos and Matthew Zhong
 ================================================================================
 
-- Use file to represent fake heap for now (fopen(), then mmap())
-- Could we set a thread's stack to run on this fake heap?
-    - pthread_attr_setstack()
-
    -----------------------------------------------------------------------------
 Q: What does this system need to accomplish? From the top-down, what are the
    ways that someone can use this system, and why would they use it?
@@ -66,7 +62,110 @@ Q: What does this system need to accomplish? From the top-down, what are the
     int crsem_init(crsem_t *sem, unsigned int value);
     int crsem_post(crsem_t *sem);
     int crsem_wait(crsem_t *sem);
+
+   -----------------------------------------------------------------------------
+Q: What gets checkpointed? What would we need to checkpoint, and how would we
+   restore program state after checkpointing?
+   -----------------------------------------------------------------------------
     
+    Overall, our strategy for creating a checkpoint-restore framework requires,
+    at the very minimum, three robust modules:
+        1. A non-volatile memory management system
+        2. A threading and synchronization system
+        3. A checkpoint decisions subsystem which controls <1> and <2>.
+        4. A restart routine which initializes or reinitializes <1>, <2>, and <3>
+
+    Because of the reliance on kernel-level solutions, we will not allow for 
+    checkpoint-restore on the main thread. Modern solutions which can checkpoint
+    and restore the main thread each heavily rely on kernel-level solutions.
+    Our solution only allows for the checkpointing and restoration of all 
+    user-spawned threads.
+
+    Below is an overall system architecture diagram for how this solution will
+    checkpoint and restore threads.
+
+      +--------------------+
+      |                    | spawns user threads
+      |                    +-----------------------------------------++
+      |                    | signals threads for manual checkpoint   ||
+      |  Main Application  +------------------------++               ||
+      |                    | synchronization        ||               || 
+      |                    +-------++               ||               || 
+      |                    |       ||               ||               ||
+      +-----++-------------+       ||               ||               ||
+            || spawned             ||               ||               ||
+            || upon crinit()       ||               ||               ||
+            || <restart routine>   ||               ||               ||
+            ||                     ||  user-spawned || thread block  ||
+            ||            +--------||---------------||---------------||--------+
+            VV            |        VV               VV               VV        |
+      +------------+      |  +------------+   +------------+   +------------+  |
+      | CR Control |      |  | CRThread 1 |   | CRThread 2 |   | CRThread 3 |  |
+      |   Thread   |      |  |     \      |   |     \      |   |     \      |  |
+      |      \     |      |  |      \     |   |      \     |   |      \     |  |
+      |      /     |      |  |      /     |   |      /     |   |      /     |  |
+      |     /      |      |  |     /      |   |     /      |   |     /      |  |
+      |     \      | CTRL |  |     \      |   |     \      |   |     \      |  |
+      |      \     +----->|  |      \     |   |      \     |   |      \     |  |
+      |      /     |      |  |      /     |   |      /     |   |      /     |  |
+      |     /      |      |  |     /      |   |     /      |   |     /      |  |
+      |     |      |      |  |     |      |   |     |      |   |     |      |  |
+      |     V      |      |  |     V      |   |     V      |   |     V      |  |
+      |            |      |  |            |   |            |   |            |  |
+      +---+----+---+      |  +---+----+---+   +---+----+---+   +---+----+---+  |
+          |    |          |      |    |           |    |           |    |      |
+          |    |          +------|----|-----------|----|-----------|----|------+
+          |    |                 |    |           |    |           |    |      
+          |    |                 V    V           V    V           V    V
+          |    |             +-------------------------------------------------+
+          |    +------------>|                 Volatile Heap                   |
+          |    heap / cache  +-------------------------------------------------+
+          |    management                ||
+          |                              VV            +------------+
+          |                       +--------------+     | Heartbeat  |
+          +---------------------->| CR Subsystem |<----+ Checkpoint |
+          internal C/R management +--------------+     | Timer      |
+                                         ||            +------------+
+                                         VV
+    +--------------------------------------------------------------------------+
+    |                       Non-Volatile Heap (Filesystem)                     |
+    +--------------------------------------------------------------------------+
+
+    In essence, what we will be doing is extending the regular user application
+    so that it spawns threads which each can be checkpointed. Initially, these
+    threads, spawned in our own user thread block module, run in volatile 
+    memory - their stacks will actually be allocated from a heap of our design. 
+    We specifically need to reimplement our heap in order to provide for a low 
+    level method to decide what memory needs to be cached, and when.
+
+    The functions setjmp(jmp_buf env) and longjmp(jmp_buf env, int val) allow us
+    to set jump locations and then jump to them - we could put the jump buffer 
+    into some form of non-volatile storage upon checkpoint, mmap() the addresses
+    so that they stay consistent between runs, and then longjmp() upon restoraton.
+
+      +--------------------+
+      |                    |
+      |  Main Application  |
+      |                    |
+      +--+-----------------+
+         |
+         V                                          (Non-Volatile Store) CRStore
+      +----------+-----------+-------------------------------------------------+
+      | METADATA | jmp_buf[] | Thread-Local Store -->                <-- Stack |
+      +----------+-----------+-------------------------------------------------+
+             ------------------> increasing addresses ------------------>
+
+    When restoring the program, we mmap() the jmp_buf[] and then jump to the 
+    currently executing point in our program. We need to make sure that the 
+    mmap() addresses are coherent with before the checkpoint as part of our
+    implementation. 
+
+    The process specified above will occur for each thread which was 
+    checkpointed successfully. The threads will be loaded back into volatile
+    memory, meaning the volatile heap will be restored to its state prior to the
+    crash. Then, each thread's stack pointer will be readjusted to the last
+    selected checkpoint as set by setjmp(), and the program should continue
+    execution as normal.
 
    -----------------------------------------------------------------------------
 Q: What happens if we get a CRASH while in the midst of a checkpoint? Wouldn't
@@ -104,7 +203,7 @@ Q: What happens if we get a CRASH while in the midst of a checkpoint? Wouldn't
                     CHP 5 |                          | CHP 6
                           V                          V
                     +-----------+              +-----------+
-                    | NVStore 1 |              | NVStore 2 |
+                    | CRStore 1 |              | CRStore 2 |
                     +-----------+              +-----------+
 
       Checkpoints can be made to opposite buffers at each write. Only one buffer
@@ -115,27 +214,27 @@ Q: What happens if we get a CRASH while in the midst of a checkpoint? Wouldn't
       diagram and explanation below for a brief overview on the checkpointing
       process:
 
-          Checkpoint Operation              Volatile Memory State to NVStore
+          Checkpoint Operation              Volatile Memory State to CRStore
           --------------------              --------------------------------
 
                                              META   PAYLOAD
                                             +------+---------------------------+
-          1. Lock the NVStore Buffer and    | WL=0 | X     X      XX       XX  |
-             write the lock into NVStore    +--+---+---------------------------+
+          1. Lock the CRStore Buffer and    | WL=0 | X     X      XX       XX  |
+             write the lock into CRStore    +--+---+---------------------------+
                                                |
                                                V  
                                             +------+---------------------------+
-                                    NVStore | WL=0 |                           |
+                                    CRStore | WL=0 |                           |
                                             +------+---------------------------+
                                             
                                              META   PAYLOAD
                                             +------+---------------------------+
            2. Deposit all updated memory    | WL=0 | X     X      XX       XX  |
               blocks in the payload to      +------+-+-----+------++-------++--+
-              the NVStore                            |     |      ||       ||
+              the CRStore                            |     |      ||       ||
                                                      V     V      VV       VV
                                             +------+---------------------------+
-                                    NVStore | WL=0 | +     +      ++       ++  |
+                                    CRStore | WL=0 | +     +      ++       ++  |
                                             +------+---------------------------+
 
                                              META   PAYLOAD
@@ -144,17 +243,17 @@ Q: What happens if we get a CRASH while in the midst of a checkpoint? Wouldn't
              previously written regions     +------+---------------------------+
 
                                             +------+---------------------------+
-                                    NVStore | WL=0 | +     +      ++       ++  |
+                                    CRStore | WL=0 | +     +      ++       ++  |
                                             +------+---------------------------+
 
                                              META   PAYLOAD
                                             +------+---------------------------+
-          4. Unlock the NVStore Buffer and  | WL=1 |                           |
-             write the unlock into NVStore  +------+---------------------------+
+          4. Unlock the CRStore Buffer and  | WL=1 |                           |
+             write the unlock into CRStore  +------+---------------------------+
                                                |
                                                V  
                                             +------+---------------------------+
-                                    NVStore | WL=1 | +     +      ++       ++  |
+                                    CRStore | WL=1 | +     +      ++       ++  |
                                             +------+---------------------------+
       
       The theory behind why we're doing this is to be able to detect if a crash
@@ -170,54 +269,6 @@ Q: What happens if we get a CRASH while in the midst of a checkpoint? Wouldn't
       only safe restoration point is the store with a WRITE_LOCK of 1.
 
    -----------------------------------------------------------------------------
-Q: What gets checkpointed? What would we need to checkpoint, and how would we
-   restore program state after checkpointing?
+Q: How will we test this system?
    -----------------------------------------------------------------------------
-
-    - Solution Idea: 
-      The functions setjmp(jmp_buf env) and longjmp(jmp_buf env, int val) allow
-      you to set jump locations and then jump to them - we could put the jump 
-      buffer into some form of non-volatile storage upon checkpoint, mmap the 
-      addresses so that they stay consistent between runs, and then longjmp()
-      upon restoraton.
-
-        +--------------------+
-        |                    |
-        |  Main Application  |
-        |                    |
-        +--+-----------------+
-           |
-           V                                                NVStore
-        +----------+-----------+-----------------------------------+
-        | METADATA | jmp_buf[] | Heap -->                <-- Stack |
-        +----------+-----------+-----------------------------------+
-        ------------------> increasing addresses ------------------>
-
-      When restoring the program, we mmap() the jmp_buf[] and then jump to the 
-      currently executing point in our program. We need to make sure that the 
-      mmap() addresses are coherent with before the checkpoint as part of our
-      implementation.
-
-      As a reminder to both of us (since I needed to look this up), the function
-      signature of mmap() and munmap() does this:
-
-          void *mmap(void *addr, size_t length, int prot, int flags, int fd, 
-                     off_t offset)
-            - addr      the starting address of the new mapping
-            - length    the length of the memory segment to remap
-            - prot      the read/write privileges, as a bitwise-OR of:
-                             PROT_EXEC, PROT_READ, PROT_WRITE, PROT_NONE
-            - flags     determines whether or not updates to this region become 
-                             reflected in the file - for us, we want MAP_SHARED
-            - fd        the file descriptor which holds the output memory target
-            - offset    how many bytes are offset from the start of the file
-
-          void *munmap(void *addr, size_t length)
-            - addr      the address to unmap
-            - length    the original length of the memory segment
-
-   -----------------------------------------------------------------------------
-Q: What does the final product look like, for the user? What should our 
-   deliverables look like?
-   -----------------------------------------------------------------------------
-
+    Our first 
