@@ -8,6 +8,67 @@ Team SIGSYS(31): Savannah Amos and Matthew Zhong
     - pthread_attr_setstack()
 
    -----------------------------------------------------------------------------
+Q: What does this system need to accomplish? From the top-down, what are the
+   ways that someone can use this system, and why would they use it?
+   -----------------------------------------------------------------------------
+    In this project, our objective is to create a checkpoint-restore framework
+    which users can integrate into C applications. Using various forms of 
+    persistent memory, this framework will enable a user-level application to
+    continue computation from the middle of a crash, as if the program never had
+    crashed in the first place. 
+
+    Imagine if we had a program which was performing some form of complex 
+    computation over a long period of time, like for example, a machine learning
+    and training algorithm. Normally, abrupt termination would spell disaster
+    for the algorithm - we would need to restart the algorithm from the very 
+    beginning and lose all of this progress.
+
+        +----------------+  In the diagram on the left, we can see what happens 
+        | bash ./ml_algo |  to the execution of a simple program when a crash 
+        |                |  occurs. The issue is that, after crashing at <1>,
+        | 0. <STARTED>   |  we would need to completely restart the program
+        |        |       |  at <0>, and lose all of our progress.
+        |        V       |
+        | 1. <CRASHED>   |  A checkpoint-restore algorithm would allow us to
+        |                |  pick up the program from where the program crashed
+        | bash ./ml_algo |  at point <2>, allowing us to continue execution 
+        |                |  while maintaining all previous program state.
+        | 2. <RESTORED>  |
+        |        |       |  For scalable algorithms which run on thousands of
+        |        V       |  threads or which naturally take a long time to run,
+        | 3. <FINISHED>  |  a checkpoint-restore framework increases the 
+        |                |  stability and likelihood that we will get meaningful
+        +----------------+  results from the programs in a timely manner. 
+    
+    As a simple C library, we envision this program to have the following 
+    interface, included in a single header file - checkpoint_restore.h:
+
+    /* initializes the entire checkpoint-restore framework */
+    int crinit(struct crattr *attr);
+
+    /* the meat of the checkpoint-restore framework, self explanatory */
+    int checkpoint(void);
+    int restore(void);
+
+    /* non-volatile memory allocation and management */
+    void *crmalloc(size_t size);
+    void *crrealloc(void *ptr, size_t size);
+    void crfree(void *ptr);
+
+    /* non-volatile thread library, based off of pthreads */
+    int crthread_create(crthread_t *thread, 
+                        void *(*start_routine), (void *), void *arg);
+    int crthread_join(crthread_t thread, void **retval);
+    int crthread_cancel(crthread_t thread);
+    int crthread_kill(crthread_t thread, int sig);
+
+    /* non-volatile semaphores, based off of POSIX semaphores */
+    int crsem_init(crsem_t *sem, unsigned int value);
+    int crsem_post(crsem_t *sem);
+    int crsem_wait(crsem_t *sem);
+    
+
+   -----------------------------------------------------------------------------
 Q: What happens if we get a CRASH while in the midst of a checkpoint? Wouldn't
    we still be in the middle of writing to a file?
    -----------------------------------------------------------------------------
