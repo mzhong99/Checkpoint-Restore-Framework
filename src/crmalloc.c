@@ -21,11 +21,12 @@ int main(int argc, char **argv)
 
     fd = open(argv[1], O_CREAT | O_RDWR);
     printf("fd: %d\n", fd);
-    rc = posix_fallocate(fd, 0, 1024);
+
+    addr = mmap(NULL, 32, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+
+    rc = posix_fallocate(fd, 0, 32);
     if (rc != 0)
         printf("FAILED ALLOCATE, %d\n", rc);
-
-    addr = mmap(NULL, 1024, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 
     if (addr == MAP_FAILED)
         printf("mmap() failed.\n");
@@ -35,7 +36,7 @@ int main(int argc, char **argv)
         printf("%s\n", addr);
     }
 
-    munmap(addr, 1024);
+    munmap(addr, 32);
     close(fd);
     printf("DONE\n");
 }
