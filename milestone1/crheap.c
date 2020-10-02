@@ -21,22 +21,28 @@
 #define CRPRINTF_BUFLEN     256
 #define DEFAULT_NVFILE      "heapfile.cr"
 
+/* Imported from the malloc project - change variables as you wish! */
 struct tagdata
 {
     bool allocated: 1;
     size_t plsize: 31;
 };
 
+/* Imported from the malloc project - change variables as you wish! */
 union tag
 {
     struct tagdata data;
     volatile void *align;
 };
 
+/* Imported from the malloc project - change variables as you wish! */
 struct block
 {
     union tag tag;
-    struct list_elem nvelem;
+
+    struct list_elem nvelem;    /* this is probably the only variable that the
+                                 * non-volatile heap really needs to function */
+
     struct list_elem velem;
     char payload[0];
 };
