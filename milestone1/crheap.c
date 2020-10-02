@@ -1,10 +1,25 @@
 #include "crheap.h"
 #include "list.h"
 
+#include <unistd.h>
+#include <fcntl.h>
+#include <errno.h>
+
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/mman.h>
+
+#include <string.h>
+#include <stdarg.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+
 /******************************************************************************/
 /** Macros, Definitions, and Static Variables ------------------------------- */
 /******************************************************************************/
 #define CRPRINTF_BUFLEN     256
+#define DEFAULT_NVFILE      "heapfile.cr"
 
 struct tagdata
 {
@@ -41,7 +56,7 @@ struct crheap
     void *nvheapend;
 };
 
-/** Static variables for holding heap state. */
+/** Static variables for holding heap state. (use like it's an object) */
 static struct crheap s_crheap;
 static struct crheap *self = &s_crheap;
 
@@ -61,14 +76,36 @@ static struct crheap *crheap_instance()
 /******************************************************************************/
 int crheap_init(const char *filename)
 {
+    crheap_instance();
 
+    if (filename == NULL)
+        filename = DEFAULT_NVFILE;
+
+    self->nvfd = open(filename, O_RDWR | O_CREAT);
+
+    if (self->nvfd == -1)
+        return -EBADF;
+
+    return 0;
+}
+
+int crheap_shutdown()
+{
+    int rc;
+
+    rc = close(self->nvfd);
+
+    if (rc == -1)
+        return -EBADF;
+
+    return 0;
 }
 
 int crprintf(const char * __restrict fmt, ...)
 {
     static char buffer[CRPRINTF_BUFLEN];
     va_list list;
-    int i, nwrite;
+    int nwrite;
 
     va_start(list, fmt);
     nwrite = vsnprintf(buffer, sizeof(buffer), fmt, list);
@@ -79,5 +116,5 @@ int crprintf(const char * __restrict fmt, ...)
 
 int crheap_checkpoint()
 {
-
+    return 0;
 }

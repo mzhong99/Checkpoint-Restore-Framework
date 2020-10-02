@@ -1,0 +1,26 @@
+PROJDIR = .
+SRC_CFILES = $(shell find $(PROJDIR) -type f -name "*.c")
+OBJ_CFILES = $(patsubst %.c, %.o, $(SRC_CFILES))
+DEFAULT_NVFILE = "heapfile.cr"
+
+DEL = rm -f
+CC = gcc
+CFLAGS = -std=gnu99 -O0 -Wall -Wextra -ggdb3 
+
+EXE = crheap_test
+
+.PHONY: all clean run
+
+all: $(EXE)
+
+run: all
+	./$(EXE)
+
+$(EXE): $(OBJ_CFILES)
+	$(CC) $(CFLAGS) $(OBJ_CFILES) -o $(EXE)
+
+%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+clean:
+	$(DEL) $(OBJ_CFILES) $(EXE) $(DEFAULT_NVFILE)

@@ -60,10 +60,23 @@
  *                      If the file is not empty, we will restore the heap using
  *                      the contents of the file.
  * @return:
- *     0 -> Init successful
- *     <error codes go here>
+ *      0     -> Init successful
+ *     -EBADF -> The file presented could not be opened
+ *     <more error codes go here>
  */
 int crheap_init(const char *filename);
+
+/**
+ * Used to uninitalize and cleanup any resources consumed by the crheap 
+ * subsystem. This should close the non-volatile memory file, among other 
+ * things.
+ *
+ * @return:
+ *      0     -> Cleanup successful
+ *     -EBADF -> Non-volatile file could not be closed
+ *     <more error codes go here>
+ */
+int crheap_shutdown();
 
 /** The classic printf() function, without the embedded dynamic allocation. */
 int crprintf(const char * __restrict fmt, ...);
