@@ -7,40 +7,17 @@
  * Milestone One: A Non-Volatile Heap
  * =============================================================================
  *
- *  - Auto-callback upon dereference is HARD - requires SIGSEGV handler and is
- *    probably outside the scope of this project for this semester
- *
- *  - Implementation of crmalloc() should use sbrk(), which means there's a 
- *    distinct problem with any cstdlib functions which rely on malloc(). Use
- *    the function [int crprintf(const char * __restrict fmt, ...)] instead.
+ *  - Auto-callback upon dereference is actually pretty doable - it requires a
+ *    user fault handler which runs in a separate thread. Upon dereferencing, if
+ *    a page was written to, we need to checkpoint the page that was targeted.
  *
  *  - In order to update any memory, we designate that the user must accurately
  *    use a transaction-model. Any dereference-write on an array would require a
  *    transaction lock first.
  *
  *  - When we checkpoint the memory, we need to temporarily lock access and send
- *    the data to a file. Probably going to use an mmap()'d file for this.
- *
- *  - Loading the entire heap is a multi-step process. First, we need to parse 
- *    in any metadata for flags to set. Then, we need to rebuild our heap by 
- *    re-extending sbrk() to the old heap size, then dumping our data structure
- *    into the heap. 
- *
- *  - This also means that, in-file, the pointers we store should be RELATIVE 
- *    pointers, a.k.a. offsets from the start of the file. They should NOT be 
- *    absolute pointers. Because of address space layout randomization in modern
- *    operating systems, we have no guarantee that any of the pointers stored 
- *    will represent valid pointer addresses upon reload.
- *
- *  - It follows that in our implementation of crmalloc() itself, we need to be
- *    really careful as to when the payload we have allocated is a legitimate 
- *    POINTER or if it is just pure-data. Maybe we can just tell users that they
- *    can't allocate pointers in the heap? 
- *
- *        (e.g. int** ptr = malloc(sizeof(*ptr))) -> this won't work anymore 
- *                                                   unless we assume *ptr is
- *                                                   a heap address. Maybe add
- *                                                   an assertion for writes?
+ *    the data to a file. Probably going to use an mmap()'d file for this? Or 
+ *    maybe we could potentially use just a file to dump everything into?
  *
  *  - The API we will develop for Milestone One is specified in the functions
  *    below. Each function's purpose is documented because of specific 

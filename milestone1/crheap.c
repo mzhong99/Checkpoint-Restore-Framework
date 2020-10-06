@@ -49,10 +49,6 @@ struct block
 
 struct crheap
 {
-    /* Bookkeeping system variables */
-    const char *nvfilename;
-    int nvfd;
-
     /* Volatile memory management */
     void *vheapstart;
     void *vheapend;
@@ -87,23 +83,11 @@ int crheap_init(const char *filename)
     if (filename == NULL)
         filename = DEFAULT_NVFILE;
 
-    self->nvfd = open(filename, O_RDWR | O_CREAT);
-
-    if (self->nvfd == -1)
-        return -EBADF;
-
     return 0;
 }
 
 int crheap_shutdown()
 {
-    int rc;
-
-    rc = close(self->nvfd);
-
-    if (rc == -1)
-        return -EBADF;
-
     return 0;
 }
 
