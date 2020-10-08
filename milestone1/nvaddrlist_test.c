@@ -6,10 +6,10 @@
 #include <stddef.h>
 
 #define SMALL_LIST_POWER    6
-#define SMALL_LIST_SIZE     (2 << SMALL_LIST_POWER)
+#define SMALL_LIST_SIZE     (1 << SMALL_LIST_POWER)
 
 #define LARGE_LIST_POWER    16
-#define LARGE_LIST_SIZE     (2 << LARGE_LIST_POWER)
+#define LARGE_LIST_SIZE     (1 << LARGE_LIST_POWER)
 
 #define NUM_TRIALS          5
 

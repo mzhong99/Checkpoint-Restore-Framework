@@ -23,41 +23,7 @@
 
 #include "nvaddrlist.h"
 #include "nvblock.h"
-
-/******************************************************************************/
-/** Macros, Definitions, and Static Variables: nvblock ---------------------- */
-/******************************************************************************/
-
-
-/******************************************************************************/
-/** Macros, Definitions, and Static Variables: nvaddrtable ------------------ */
-/******************************************************************************/
-
-#define NVADDRTABLE_DEFAULT_SIZE    (2 << 12)
-
-/* simple hashtable used to map addresses back to the block that owns it */
-struct nvaddrtable
-{
-    struct nvblock **values;
-    size_t nelem;
-    size_t cap;
-};
-
-/* helper functions for hashtable */
-static struct nvaddrtable *nvaddrtable_new();
-
-static void nvaddrtable_delete(struct nvaddrtable *table);
-
-static size_t nvaddrtable_qhash(struct nvaddrtable *table, void *addr, 
-                                size_t k);
-
-static void nvaddrtable_expand(struct nvaddrtable *table);
-
-static void nvaddrtable_insert(struct nvaddrtable *table, 
-                               struct nvblock *block);
-
-static struct nvblock *nvaddrtable_find(struct nvaddrtable *table, 
-                                        void *pgstart);
+#include "nvaddrtable.h"
 
 /******************************************************************************/
 /** Macros, Definitions, and Static Variables: nvstore ---------------------- */
@@ -86,98 +52,6 @@ static struct nvstore *const self = &s_nvstore;
 
 /** task function - do not call directly, run on separate thread */
 static void *nvstore_tf_uffdworker(__attribute__((unused))void *args);
-
-
-/******************************************************************************/
-/** Private Implementation: nvaddrtable ------------------------------------- */
-/******************************************************************************/
-static struct nvaddrtable *nvaddrtable_new()
-{
-    struct nvaddrtable *table = malloc(sizeof(*table));
-
-    table->nelem = 0;
-    table->cap = NVADDRTABLE_DEFAULT_SIZE;
-
-    table->values = calloc(table->cap, sizeof(*table->values));
-
-    return table;
-}
-
-static void nvaddrtable_delete(struct nvaddrtable *table)
-{
-    free(table->values);
-    free(table);
-}
-
-static size_t nvaddrtable_qhash(struct nvaddrtable *table, void *addr, size_t k)
-{
-    size_t base, offset, hash;
-
-    base = (size_t)addr / sysconf(_SC_PAGE_SIZE);
-    offset = (k * k) + k;
-    hash = (base + offset) % table->cap;
-
-    return hash;
-}
-
-static void nvaddrtable_expand(struct nvaddrtable *table)
-{
-    struct nvblock **oldvalues;
-    size_t oldcap, i;
-
-    oldcap = table->cap;
-    oldvalues = table->values;
-
-    table->cap <<= 1;
-    table->values = calloc(table->cap, sizeof(*table->values));
-
-    for (i = 0; i < oldcap; i++)
-        if (oldvalues[i] != NULL)
-            nvaddrtable_insert(table, oldvalues[i]);
-
-    free(oldvalues);
-}
-
-static void nvaddrtable_insert(struct nvaddrtable *table, 
-                               struct nvblock *block)
-{
-    size_t k, hash;
-
-    if (7 * table->nelem > 10 * table->cap)
-        nvaddrtable_expand(table);
-
-    for (k = 0; k < table->cap; k++)
-    {
-        hash = nvaddrtable_qhash(table, block->pgstart, k);
-
-        if (table->values[hash] == NULL)
-        {
-            table->values[hash] = block;
-            break;
-        }
-    }
-
-    assert(k < table->cap);
-}
-
-static struct nvblock *nvaddrtable_find(struct nvaddrtable *table, 
-                                        void *pgstart)
-{
-    size_t k, hash;
-
-    for (k = 0; k < table->cap; k++)
-    {
-        hash = nvaddrtable_qhash(table, pgstart, k);
-
-        if (table->values[hash] == NULL)
-            return NULL;
-
-        if (table->values[hash]->pgstart == pgstart)
-            return table->values[hash];
-    }
-
-    return NULL;
-}
 
 /******************************************************************************/
 /** Private Implementation: nvstore ----------------------------------------- */

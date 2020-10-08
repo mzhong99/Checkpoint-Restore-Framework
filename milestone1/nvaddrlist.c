@@ -8,7 +8,7 @@ struct nvaddrlist *nvaddrlist_new(size_t power)
     list = malloc(sizeof(*list));
 
     list->len = 0;
-    list->cap = power;
+    list->cap = 1 << power;
     list->addrs = calloc(list->cap, sizeof(*list->addrs));
 
     return list;
