@@ -1,7 +1,7 @@
 PROJDIR = .
 SRC_CFILES = $(shell find $(PROJDIR) -type f -name "*.c")
 OBJ_CFILES = $(patsubst %.c, %.o, $(SRC_CFILES))
-DEFAULT_NVFILE = "heapfile.cr"
+DEFAULT_NVFILE = "heapfile.heap"
 
 DEL = rm -f
 CC = gcc
@@ -34,4 +34,4 @@ $(EXE): $(OBJ_CFILES)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	$(DEL) $(OBJ_CFILES) $(EXE) $(DEFAULT_NVFILE) vgcore*
+	$(DEL) $(OBJ_CFILES) $(EXE) $(DEFAULT_NVFILE) vgcore* *.heap
