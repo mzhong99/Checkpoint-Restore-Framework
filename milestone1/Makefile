@@ -6,6 +6,7 @@ DEFAULT_NVFILE = "heapfile.cr"
 DEL = rm -f
 CC = gcc
 CFLAGS = -std=gnu99 -O0 -Wall -Wextra -ggdb3 
+LFLAGS = -lpthread
 
 EXE = crheap_test
 
@@ -16,11 +17,21 @@ all: $(EXE)
 run: all
 	./$(EXE)
 
+commit: clean
+	git add *.h *.c
+	git commit
+
+memtest: all
+	valgrind --leak-check=full ./$(EXE)
+
+debug: all
+	gdb ./$(EXE)
+
 $(EXE): $(OBJ_CFILES)
-	$(CC) $(CFLAGS) $(OBJ_CFILES) -o $(EXE)
+	$(CC) $(CFLAGS) $(LFLAGS) $(OBJ_CFILES) -o $(EXE)
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	$(DEL) $(OBJ_CFILES) $(EXE) $(DEFAULT_NVFILE)
+	$(DEL) $(OBJ_CFILES) $(EXE) $(DEFAULT_NVFILE) vgcore*
