@@ -65,7 +65,7 @@ const char *test_nvaddrtable_expansion()
         blocks[i] = nvblock_new(NULL, 1);
 
         if (blocks[i] == NULL)
-            return "Failure occurred in basic allocation.";
+            return "Failure occurred in basic block allocation.";
 
         nvaddrtable_insert(table, blocks[i]);
     }
@@ -82,6 +82,41 @@ const char *test_nvaddrtable_expansion()
 
     nvaddrtable_delete(table);
     for (i = 0; i < LARGE_SIZE; i++)
+        nvblock_delete(blocks[i]);
+
+    return NULL;
+}
+
+const char *test_nvaddrtable_large_entries()
+{
+    struct nvaddrtable *table;
+    struct nvblock *blocks[SMALL_SIZE], *find;
+    size_t i, j;
+
+    table = nvaddrtable_new(SMALL_POWER);
+
+    for (i = 0; i < SMALL_SIZE; i++)
+    {
+        blocks[i] = nvblock_new(NULL, i + 1);
+
+        if (blocks[i] == NULL)
+            return "Failure occurred in basic block allocation.";
+
+        nvaddrtable_insert(table, blocks[i]);
+    }
+
+    for (i = 0; i < SMALL_SIZE; i++)
+    {
+        for (j = 0; j < sysconf(_SC_PAGE_SIZE) * blocks[i]->npages; j += 1024)
+        {
+            find = nvaddrtable_find(table, blocks[i]->pgstart + j);
+            if (find != blocks[i])
+                return "Searching for block using offset address failed.";
+        }
+    }
+
+    nvaddrtable_delete(table);
+    for (i = 0; i < SMALL_SIZE; i++)
         nvblock_delete(blocks[i]);
 
     return NULL;

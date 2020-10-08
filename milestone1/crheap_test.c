@@ -26,6 +26,8 @@ void run_all_tests()
              "nvaddrtable", "Basic insertion for one block");
     run_test(test_nvaddrtable_expansion,
              "nvaddrtable", "More insertions expand the table");
+    run_test(test_nvaddrtable_large_entries,
+             "nvaddrtable", "Insertions of larger than one page");
 }
 
 int main()

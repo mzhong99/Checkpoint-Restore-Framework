@@ -4,6 +4,29 @@
 #include <assert.h>
 
 #include <stdlib.h>
+#include <stdio.h>
+
+static struct nventry *__nvaddrtable_find(struct nvaddrtable *table, void *key)
+{
+    size_t base, offset, hash, k;
+    void *pgstart;
+
+    for (k = 0; k < table->cap; k++)
+    {
+        pgstart = (void *)((uintptr_t)key & ~(sysconf(_SC_PAGE_SIZE) - 1));
+        base = (size_t)pgstart / sysconf(_SC_PAGE_SIZE);
+        offset = ((k * k) + k) >> 1;
+        hash = (base + offset) % table->cap;
+
+        if (table->entries[hash].key == pgstart)
+            return &table->entries[hash];
+
+        if (table->entries[hash].key == NULL)
+            return &table->entries[hash];
+    }
+
+    return NULL;
+}
 
 struct nvaddrtable *nvaddrtable_new(size_t power)
 {
@@ -12,88 +35,60 @@ struct nvaddrtable *nvaddrtable_new(size_t power)
     table->nelem = 0;
     table->cap = 1 << power;
 
-    table->values = calloc(table->cap, sizeof(*table->values));
+    table->entries = calloc(table->cap, sizeof(*table->entries));
 
     return table;
 }
 
 void nvaddrtable_delete(struct nvaddrtable *table)
 {
-    free(table->values);
+    free(table->entries);
     free(table);
-}
-
-size_t nvaddrtable_qhash(struct nvaddrtable *table, void *addr, size_t k)
-{
-    size_t base, offset, hash;
-    void *pgstart;
-
-    pgstart = (void *)((uintptr_t)addr & ~(sysconf(_SC_PAGE_SIZE) - 1));
-    base = (size_t)pgstart / sysconf(_SC_PAGE_SIZE);
-    offset = ((k * k) + k) >> 1;
-    hash = (base + offset) % table->cap;
-
-    return hash;
 }
 
 void nvaddrtable_expand(struct nvaddrtable *table)
 {
-    struct nvblock **oldvalues;
+    struct nventry *oldentries;
     size_t oldcap, i;
 
+    oldentries = table->entries;
     oldcap = table->cap;
-    oldvalues = table->values;
 
     table->cap <<= 1;
-    table->values = calloc(table->cap, sizeof(*table->values));
+    table->entries = calloc(table->cap, sizeof(*table->entries));
 
     for (i = 0; i < oldcap; i++)
-        if (oldvalues[i] != NULL)
-            nvaddrtable_insert(table, oldvalues[i]);
+        if (oldentries[i].value != NULL)
+            nvaddrtable_insert(table, oldentries[i].value);
 
-    free(oldvalues);
+    free(oldentries);
 }
 
 void nvaddrtable_insert(struct nvaddrtable *table, struct nvblock *block)
 {
-    size_t k, hash;
+    struct nventry *entry;
+    void *pgstart;
+    size_t pgidx;
 
-    /* expand at 70% load - this method prevents divisions through the FPU */
-    if (10 * table->nelem > 7 * table->cap)
-        nvaddrtable_expand(table);
-
-    for (k = 0; k < table->cap; k++)
+    for (pgidx = 0; pgidx < block->npages; pgidx++)
     {
-        hash = nvaddrtable_qhash(table, block->pgstart, k);
+        /* expand at 70% load - this method prevents FPU divisions */
+        if (10 * table->nelem > 7 * table->cap)
+            nvaddrtable_expand(table);
 
-        if (table->values[hash] == NULL)
-        {
-            table->values[hash] = block;
-            table->nelem++;
-            break;
-        }
+        pgstart = block->pgstart + (pgidx * sysconf(_SC_PAGE_SIZE));
+        entry = __nvaddrtable_find(table, pgstart);
+
+        entry->key = pgstart;
+        entry->value = block;
+        table->nelem++;
     }
-
-    assert(k < table->cap);
 }
 
 struct nvblock *nvaddrtable_find(struct nvaddrtable *table, void *addr)
 {
-    size_t k, hash;
-    void *pgstart;
+    struct nventry *entry;
 
-    pgstart = (void *)((uintptr_t)addr & ~(sysconf(_SC_PAGE_SIZE) - 1));
-
-    for (k = 0; k < table->cap; k++)
-    {
-        hash = nvaddrtable_qhash(table, pgstart, k);
-
-        if (table->values[hash] == NULL)
-            return NULL;
-
-        if (table->values[hash]->pgstart == pgstart)
-            return table->values[hash];
-    }
-
-    return NULL;
+    entry = __nvaddrtable_find(table, addr);
+    return entry->value;
 }
