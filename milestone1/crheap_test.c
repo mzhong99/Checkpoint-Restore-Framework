@@ -5,6 +5,7 @@
 #include "nvaddrlist_test.h"
 #include "nvblock_test.h"
 #include "nvaddrtable_test.h"
+#include "nvstore.h"
 
 /**
  * Usually, I try to keep a strict line limit of 80 characters. This is the only
@@ -33,6 +34,11 @@ void run_all_tests()
     run_test(test_nvaddrtable_basic_insertion, "nvaddrtable", "Basic insertion for one block");
     run_test(test_nvaddrtable_expansion, "nvaddrtable", "More insertions expand the table");
     run_test(test_nvaddrtable_large_entries, "nvaddrtable", "Insertions of larger than one page");
+
+    /**************************************************************************/
+    /** Tests: nvstore ------------------------------------------------------ */
+    /**************************************************************************/
+    run_test(test_nvstore_init, "nvstore", "Basic initialization and shutdown");
 }
 
 int main()
