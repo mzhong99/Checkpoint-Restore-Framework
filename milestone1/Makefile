@@ -18,7 +18,7 @@ run: all
 	./$(EXE)
 
 commit: clean
-	git add *.h *.c
+	git add *.h *.c Makefile
 	git commit
 
 memtest: all
