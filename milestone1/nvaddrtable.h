@@ -4,7 +4,7 @@
 #include <stddef.h>
 #include "nvblock.h"
 
-#define NVADDRTABLE_DEFAULT_SIZE    (1 << 12)
+#define NVADDRTABLE_INIT_POWER  12
 
 struct nventry
 {

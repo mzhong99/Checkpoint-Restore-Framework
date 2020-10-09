@@ -42,7 +42,7 @@ struct nvstore
 
     void *tmppage;              /* the mmapped page to load upon pagefault */
 
-    int nvfd;                   /* file where the heap pages are stored */
+    FILE* nvfs;                 /* file where the heap pages are stored */
     off_t filesize;             /* size of current file in bytes */
 };
 
@@ -112,52 +112,96 @@ static void *nvstore_tf_uffdworker(__attribute__((unused))void *args)
 /******************************************************************************/
 /** Public-Facing API ------------------------------------------------------- */
 /******************************************************************************/
-void nvstore_init(const char *filename)
+int nvstore_init(const char *filename)
 {
     struct uffdio_api api;
     struct stat st;
+    int rc;
 
+    /* initialization of core data structures */
     list_init(&self->blocks);
     self->dirty = nvaddrlist_new(NVADDRLIST_INIT_POWER);
+    self->table = nvaddrtable_new(NVADDRTABLE_INIT_POWER);
 
-    self->nvfd = open(filename, O_RDWR | O_CREAT);
+    /* initialization of a non-volatile file */
+    self->nvfs = fopen(filename, "w+");
 
-    stat(filename, &st);
+    if (self->nvfs == NULL)
+        return E_NVFS;
+
+    if (stat(filename, &st) != 0)
+        return E_NVFS;
+
     self->filesize = st.st_size;
 
+    /* initialization of the empty page to be loaded in */
     self->tmppage = mmap(NULL, sysconf(_SC_PAGE_SIZE), PROT_READ | PROT_WRITE,
                          MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 
+    if (self->tmppage == MAP_FAILED)
+        return E_MMAP;
+
+    /* initialization of the killswitch for when the fault handler is closed */
     self->killfd = eventfd(0, EFD_SEMAPHORE);
+
+    if (self->killfd == -1)
+        return E_KSWOPEN;
+
+    /* initialization of the userfaultfd itself */
     self->uffd = syscall(__NR_userfaultfd, O_CLOEXEC | O_NONBLOCK);
+
+    if (self->uffd == -1)
+        return E_UFFDOPEN;
 
     api.api = UFFD_API;
     api.features = 0;
-    ioctl(self->uffd, UFFDIO_API, &api);
 
-    pthread_create(&self->uffdworker, NULL, nvstore_tf_uffdworker, NULL);
+    if (ioctl(self->uffd, UFFDIO_API, &api) == -1)
+        return E_IOCTL;
+
+    /* initialization of the fault handler thread */
+    rc = pthread_create(&self->uffdworker, NULL, nvstore_tf_uffdworker, NULL);
+
+    if (rc != 0)
+        return E_PTHREAD;
+
+    return 0;
 }
 
 void *nvstore_allocpage(size_t npages)
 {
+    struct uffdio_register reg;
     struct nvblock *block;
     
     block = nvblock_new(NULL, npages);
     list_push_back(&self->blocks, &block->elem);
+    nvaddrtable_insert(self->table, block);
+
+    reg.range.start = (uintptr_t)block->pgstart;
+    reg.range.len = block->npages * sysconf(_SC_PAGE_SIZE);
+    reg.mode = UFFDIO_REGISTER_MODE_MISSING;
+
+    assert(ioctl(self->uffd, UFFDIO_REGISTER, &reg) != -1);
 
     return block->pgstart;
 }
 
-void nvstore_shutdown()
+int nvstore_shutdown()
 {
     struct list_elem *elem;
     struct nvblock *block;
     uint64_t postkill = 1;
 
-    write(self->killfd, &postkill, sizeof(postkill));
+    if (write(self->killfd, &postkill, sizeof(postkill)) != sizeof(postkill))
+        return E_WRITE;
+
     pthread_join(self->uffdworker, NULL);
 
     nvaddrlist_delete(self->dirty);
+    nvaddrtable_delete(self->table);
+
+    if (munmap(self->tmppage, sysconf(_SC_PAGE_SIZE)) != 0)
+        return E_MMAP;
 
     while (!list_empty(&self->blocks))
     {
@@ -167,22 +211,25 @@ void nvstore_shutdown()
         nvblock_delete(block);
     }
 
-    close(self->nvfd);
-    close(self->uffd);
-    close(self->killfd);
+    if (fclose(self->nvfs) != 0)
+        return E_NVFS;
+    if (close(self->uffd) == -1)
+        return E_CLOSE;
+    if (close(self->killfd) == -1)
+        return E_CLOSE;
 
-    munmap(self->tmppage, sysconf(_SC_PAGE_SIZE));
+    return 0;
 }
 
 void nvstore_checkpoint()
 {
-    size_t i;
-    void *page;
+    // size_t i;
+    // void *page;
 
-    for (i = 0; i < self->dirty->len; i++)
-    {
-        page = self->dirty->addrs[i];
-    }
+    // for (i = 0; i < self->dirty->len; i++)
+    // {
+    //     page = self->dirty->addrs[i];
+    // }
 
     nvaddrlist_clear(self->dirty);
 }

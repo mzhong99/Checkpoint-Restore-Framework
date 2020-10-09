@@ -5,7 +5,7 @@
 #include "nvaddrlist_test.h"
 #include "nvblock_test.h"
 #include "nvaddrtable_test.h"
-#include "nvstore.h"
+#include "nvstore_test.h"
 
 /**
  * Usually, I try to keep a strict line limit of 80 characters. This is the only
@@ -39,6 +39,7 @@ void run_all_tests()
     /** Tests: nvstore ------------------------------------------------------ */
     /**************************************************************************/
     run_test(test_nvstore_init, "nvstore", "Basic initialization and shutdown");
+    run_test(test_nvstore_alloc_simple, "nvstore", "Allocation and accessing a single page");
 }
 
 int main()
