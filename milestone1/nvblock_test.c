@@ -16,7 +16,7 @@ const char *test_nvblock_basic()
     void *prevaddr;
     int32_t i;
 
-    block = nvblock_new(NULL, SMALL_NUM_PAGES);
+    block = nvblock_new(NULL, SMALL_NUM_PAGES, 0);
 
     if (block == NULL)
         return "Failed on first allocation.";
@@ -30,7 +30,7 @@ const char *test_nvblock_basic()
     prevaddr = block->pgstart;
     nvblock_delete(block);
 
-    block = nvblock_new(prevaddr, SMALL_NUM_PAGES);
+    block = nvblock_new(prevaddr, SMALL_NUM_PAGES, 0);
 
     if (block == NULL)
         return "Failed on second allocation.";
@@ -57,7 +57,7 @@ const char *test_nvblock_advanced()
 
     for (i = 0; i < NUM_TRIALS; i++)
     {
-        blocks[i] = nvblock_new(NULL, LARGE_NUM_PAGES * (i + 1));
+        blocks[i] = nvblock_new(NULL, LARGE_NUM_PAGES * (i + 1), 0);
 
         if (blocks[i] == NULL)
             return "Failed on allocation";
@@ -74,7 +74,7 @@ const char *test_nvblock_advanced()
 
     for (i = 0; i < NUM_TRIALS; i++)
     {
-        blocks[i] = nvblock_new(prevaddrs[i], LARGE_NUM_PAGES * (i + 1));
+        blocks[i] = nvblock_new(prevaddrs[i], LARGE_NUM_PAGES * (i + 1), 0);
         
         if (blocks[i] == NULL)
             return "Failed on allocation";

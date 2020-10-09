@@ -6,13 +6,14 @@
 #include <stdlib.h>
 #include <assert.h>
 
-struct nvblock *nvblock_new(void *pgaddr, size_t npages)
+struct nvblock *nvblock_new(void *pgaddr, size_t npages, off_t offset)
 {
     struct nvblock *block = NULL;
 
     assert(npages > 0);
     block = malloc(sizeof(*block));
 
+    block->offset = offset;
     block->npages = npages;
     block->pgstart = mmap(pgaddr, npages * sysconf(_SC_PAGE_SIZE), 
                           PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 

@@ -15,11 +15,13 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include "nvstore.h"
+
 /******************************************************************************/
 /** Macros, Definitions, and Static Variables ------------------------------- */
 /******************************************************************************/
 #define CRPRINTF_BUFLEN     256
-#define DEFAULT_NVFILE      "heapfile.cr"
+#define DEFAULT_NVFILE      "heapfile.heap"
 
 /* Imported from the malloc project - change variables as you wish! */
 struct tagdata
@@ -52,42 +54,41 @@ struct crheap
     /* Volatile memory management */
     void *vheapstart;
     void *vheapend;
-
-    /* Non-volatile mirrored members */
-    void *nvheapstart;
-    void *nvheapend;
 };
 
 /** Static variables for holding heap state. (use like it's an object) */
 static struct crheap s_crheap;
 static struct crheap *self = &s_crheap;
 
-/** A getter to return the static memory management object instance */
-static struct crheap *crheap_instance();
-
 /******************************************************************************/
 /** Private Implementation -------------------------------------------------- */
 /******************************************************************************/
-static struct crheap *crheap_instance() 
-{ 
-    return self; 
-}
 
 /******************************************************************************/
 /** Public-Facing API: Common ----------------------------------------------- */
 /******************************************************************************/
 int crheap_init(const char *filename)
 {
-    crheap_instance();
+    int rc;
 
     if (filename == NULL)
         filename = DEFAULT_NVFILE;
+
+    rc = nvstore_init(filename);
+    if (rc != 0)
+        return rc;
 
     return 0;
 }
 
 int crheap_shutdown()
 {
+    int rc;
+
+    rc = nvstore_shutdown();
+    if (rc != 0)
+        return rc;
+
     return 0;
 }
 

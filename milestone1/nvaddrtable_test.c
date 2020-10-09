@@ -30,7 +30,7 @@ const char *test_nvaddrtable_basic_insertion()
     struct nvblock *block, *find;
     size_t i;
 
-    block = nvblock_new(NULL, 1);
+    block = nvblock_new(NULL, 1, 0);
     table = nvaddrtable_new(SMALL_POWER);
 
     nvaddrtable_insert(table, block);
@@ -62,7 +62,7 @@ const char *test_nvaddrtable_expansion()
 
     for (i = 0; i < LARGE_SIZE; i++)
     {
-        blocks[i] = nvblock_new(NULL, 1);
+        blocks[i] = nvblock_new(NULL, 1, 0);
 
         if (blocks[i] == NULL)
             return "Failure occurred in basic block allocation.";
@@ -97,7 +97,7 @@ const char *test_nvaddrtable_large_entries()
 
     for (i = 0; i < SMALL_SIZE; i++)
     {
-        blocks[i] = nvblock_new(NULL, i + 1);
+        blocks[i] = nvblock_new(NULL, i + 1, 0);
 
         if (blocks[i] == NULL)
             return "Failure occurred in basic block allocation.";

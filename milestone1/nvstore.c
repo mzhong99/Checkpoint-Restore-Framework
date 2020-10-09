@@ -125,7 +125,6 @@ int nvstore_init(const char *filename)
 
     /* initialization of a non-volatile file */
     self->nvfs = fopen(filename, "w+");
-
     if (self->nvfs == NULL)
         return E_NVFS;
 
@@ -161,7 +160,6 @@ int nvstore_init(const char *filename)
 
     /* initialization of the fault handler thread */
     rc = pthread_create(&self->uffdworker, NULL, nvstore_tf_uffdworker, NULL);
-
     if (rc != 0)
         return E_PTHREAD;
 
@@ -173,7 +171,7 @@ void *nvstore_allocpage(size_t npages)
     struct uffdio_register reg;
     struct nvblock *block;
     
-    block = nvblock_new(NULL, npages);
+    block = nvblock_new(NULL, npages, 0);
     list_push_back(&self->blocks, &block->elem);
     nvaddrtable_insert(self->table, block);
 

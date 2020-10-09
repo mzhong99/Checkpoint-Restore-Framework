@@ -6,6 +6,7 @@
 #include <stdlib.h>
 
 #define SMALL_NUM_PAGES     4
+#define LARGE_NUM_PAGES     16
 
 const char *test_nvstore_init()
 {
@@ -54,5 +55,46 @@ const char *test_nvstore_alloc_simple()
 
 const char *test_nvstore_alloc_complex()
 {
+    uint8_t *data, *refdata;
+    int i, j, rc;
+
+    rc = nvstore_init("test_nvstore_alloc_complex.heap");
+    if (rc != 0)
+        return "Initialization failed.";
+
+    for (i = 0; i < LARGE_NUM_PAGES; i++)
+    {
+        refdata = malloc(sysconf(_SC_PAGE_SIZE) * (i + 1));
+        data = nvstore_allocpage(i + 1);
+
+        for (j = 0; j < sysconf(_SC_PAGE_SIZE) * (i + 1); j++)
+        {
+            refdata[j] = (uint8_t)rand();
+            data[j] = refdata[j];
+        }
+
+        for (j = 0; j < sysconf(_SC_PAGE_SIZE) * (i + 1); j++)
+            if (data[j] != refdata[j])
+                return "Data contents do not match";
+
+        free(refdata);
+    }
+
+    nvstore_shutdown();
+    return NULL;
+}
+
+const char *test_nvstore_checkpoint_simple()
+{
+    // uint8_t *data, *refdata;
+    // int i, j, rc;
+
+    // rc = nvstore_init("test_nvstore_checkpoint_simple.heap");
+    // if (rc != 0)
+    //     return "First initialization failed.";
+
+
+
+    // nvstore_shutdown();
     return NULL;
 }
