@@ -248,7 +248,11 @@ static int nvstore_initnvfs(const char *filename)
 
     /* initialization of non-volatile file - DO NOT USE APPEND; instead, try to
      * first open under read mode and if the file doesn't exist, reopen under
-     * write mode instead. (fixing this bug was painful good god) */
+     * write mode instead. (fixing this bug was painful good god) 
+     *
+     * opening the file under append will prevent SEEK_SET from ever moving
+     * before the end of the file which is a problem when you want to modify 
+     * the file. */
     self->nvfs = fopen(filename, "r+");
     if (self->nvfs == NULL)
         self->nvfs = fopen(filename, "w+");
@@ -358,8 +362,7 @@ static struct nvblock *nvstore_fetchnvfs()
     if (nread != sizeof(npages) || npages == 0)
         return NULL;
 
-    tmp = alloca(npages * sysconf(_SC_PAGE_SIZE) + 1);
-    ((char *)tmp)[npages * sysconf(_SC_PAGE_SIZE)] = '\0';
+    tmp = alloca(npages * sysconf(_SC_PAGE_SIZE));
 
     fseek(self->nvfs, self->filesize + sizeof(addr) + sizeof(npages), SEEK_SET);
     nread = fread(tmp, 1, npages * sysconf(_SC_PAGE_SIZE), self->nvfs);

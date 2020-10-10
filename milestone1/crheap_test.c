@@ -41,7 +41,8 @@ void run_all_tests()
     run_test(test_nvstore_init, "nvstore", "Basic initialization and shutdown");
     run_test(test_nvstore_alloc_simple, "nvstore", "Allocation and accessing a single page");
     run_test(test_nvstore_alloc_complex, "nvstore", "Allocation and accessing many pages");
-    run_test(test_nvstore_checkpoint_simple, "nvstore", "Simple checkpointing and restoration");
+    run_test(test_nvstore_checkpoint_simple, "nvstore", "Simple data checkpointing and restoration");
+    run_test(test_nvstore_checkpoint_complex, "nvstore", "Complex data checkpointing and restoration");
 }
 
 int main()

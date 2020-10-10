@@ -14,7 +14,7 @@ EXE = crheap_test
 
 all: $(EXE)
 
-run: clean all
+run: all
 	./$(EXE)
 
 commit: clean
@@ -27,7 +27,7 @@ push:
 memtest: all
 	valgrind --leak-check=full ./$(EXE)
 
-debug: clean all
+debug: all
 	gdb ./$(EXE)
 
 $(EXE): $(OBJ_CFILES)

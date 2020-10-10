@@ -108,7 +108,7 @@ const char *test_nvstore_checkpoint_simple()
 
     for (i = 0; i < sysconf(_SC_PAGE_SIZE); i++)
         if (data[i] != refdata[i])
-            return "Contents do not match prior to restoration";
+            return "Contents do not match prior to restoration.";
 
     nvstore_checkpoint();
 
@@ -122,12 +122,66 @@ const char *test_nvstore_checkpoint_simple()
 
     for (i = 0; i < sysconf(_SC_PAGE_SIZE); i++)
         if (data[i] != refdata[i])
-            return "Contents do not match after restoration";
+            return "Contents do not match after restoration.";
 
     rc = nvstore_shutdown();
     if (rc != 0)
         return "Second shutdown failed.";
 
     free(refdata);
+    return NULL;
+}
+
+const char *test_nvstore_checkpoint_complex()
+{
+    uint8_t *datamany[LARGE_NUM_PAGES], *refdatamany[LARGE_NUM_PAGES];
+    int i, j, k, rc;
+
+    for (i = 0; i < LARGE_NUM_PAGES; i++)
+    {
+        rc = nvstore_init("test_nvstore_checkpoint_complex.heap");
+        if (rc != 0)
+            return "First initialization failed.";
+
+        refdatamany[i] = malloc((i + 1) * sysconf(_SC_PAGE_SIZE));
+        datamany[i] = nvstore_allocpage(i + 1);
+
+        for (j = 0; j <= i; j++)
+        {
+            for (k = 0; k < (j + 1) * sysconf(_SC_PAGE_SIZE); k++)
+            {
+                refdatamany[j][k] = (uint8_t)rand();
+                datamany[j][k] = refdatamany[j][k];
+            }
+        }
+        
+        for (j = 0; j <= i; j++)
+            for (k = 0; k < (j + 1) * sysconf(_SC_PAGE_SIZE); k++)
+                if (refdatamany[j][k] != datamany[j][k])
+                    return "Contents do not match prior to restoration.";
+
+        nvstore_checkpoint();
+
+        rc = nvstore_shutdown();
+        if (rc != 0)
+            return "First shutdown failed";
+
+        rc = nvstore_init("test_nvstore_checkpoint_complex.heap");
+        if (rc != 0)
+            return "Second initialization failed.";
+
+        for (j = 0; j <= i; j++)
+            for (k = 0; k < (j + 1) * sysconf(_SC_PAGE_SIZE); k++)
+                if (refdatamany[j][k] != datamany[j][k])
+                    return "Contents do not match after restoration.";
+
+        rc = nvstore_shutdown();
+        if (rc != 0)
+            return "Second shutdown failed";
+    }
+
+    for (i = 0; i < LARGE_NUM_PAGES; i++)
+        free(refdatamany[i]);
+
     return NULL;
 }

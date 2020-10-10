@@ -9,11 +9,24 @@
 #define ANSI_COLOR_CYAN     "\x1b[36m"
 #define ANSI_COLOR_RESET    "\x1b[0m"
 
+#define BUFSIZE     256
+
 void run_test(const char *(*test)(), const char *name, const char *description)
 {
     const char *message;
+    char buffer[BUFSIZE];
+    int nprint, ndot;
 
-    printf(ANSI_COLOR_YELLOW "[TEST] %s: %s..." ANSI_COLOR_RESET, name, description);
+    printf(ANSI_COLOR_YELLOW "[TEST] " ANSI_COLOR_RESET);
+    nprint = snprintf(buffer, BUFSIZE - 1, "%s: %s", name, description);
+    printf("%s", buffer);
+    buffer[nprint] = '\0';
+
+    ndot = 62 - nprint;
+
+    while (ndot --> 0)
+        putchar('.');
+    
     message = test();
 
     if (message == NULL)
