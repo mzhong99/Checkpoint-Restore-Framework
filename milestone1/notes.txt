@@ -1,0 +1,93 @@
+================================================================================
+Persistent User Programs [Milestone 1]: A Checkpoint / Restore Framework
+Team SIGSYS(31): Savannah Amos and Matthew Zhong
+================================================================================
+
+    The non-volatile file layout we will use is nothing but consecutive blocks 
+    of memory with minimal metadata. Each block we place in this file looks like
+    the diagram below:
+
+    Memory Layout of a Single Block
+    +--------+--------+--------------------------------+
+    |  addr  | npages | <--------- pagedata ---------> |
+    +--------+--------+--------------------------------+
+
+    For the sake of brevity, we will use the following abbreviations and 
+    definitions in the table below:
+
+    +----------------+---------------------------------------------------------+
+    | Name (Abbrev.) | Description                                             |
+    +----------------+---------------------------------------------------------+
+    | addr       (A) | The virtual memory address denoting the start of the    |
+    |                | page from the last time the code was executed.          |
+    +----------------+---------------------------------------------------------+
+    | npages     (P) | The number of pages in this memory address. To compute  |
+    |                | the number of BYTES which were saved, multiply this     |
+    |                | number by the pagesize, accessible in <unistd.h> using  |
+    |                | the function [sysconf(_SC_PAGE_SIZE)].                  |
+    +----------------+---------------------------------------------------------+
+    | pagedata   (D) | The actual memory stored and to be loaded back in upon  |
+    |                | restoration.                                            |
+    +----------------+---------------------------------------------------------+
+
+    It follows that the entire file would look something like this:
+
+    Memory Layout of Entire File               (file continues indefinitiely)
+    +---+---+--------------+---+---+---------+---+---+------+--------------->
+    | A | P | D            | A | P | D       | A | P | D    | A | P | D ---->
+    +---+---+--------------+---+---+---------+---+---+------+--------------->
+    <------ metadata ------>
+
+    You're probably wondering, "Where did the metadata chunk from the original
+    design document go?" The simple answer is that we've instead chosen to store
+    the metadata inside of the very first pagedata segment of the first memory
+    block. This in effect simplifies the memory checkpointing and restoration 
+    process - the only thing we ever concern ourselves with is simply 
+    non-volatile blocks of memory.
+
+    When we allocate new pages of memory using nvstore_allocpage(), the 
+    procedure we use includes the following components:
+
+        1.) Use mmap() to request the kernel to map out some memory space for us
+        2.) Insert the new page into our bookkeeping data structures
+        3.) Add a non-volatile representation of the page to our filesystem
+        4.) Save the current file offset of this block in volatile memory
+        5.) Return the pagedata start to the user memory allocator [crmalloc()]
+
+    This page allocation has NO free() variant - once memory is allocated, it 
+    STAYS allocated in the file. To solve this issue, we have also created a 
+    memory manager which users should comfortably use in the form of 
+    [crmalloc()], [crfree()], [crrealloc()], etc.
+
+    When we restore pages from the non-volatile filesystem, the procedure we use
+    includes the following components:
+
+        1.) Attempt to fetch one memory block's worth of non-volatile data
+        2.) If fetch failed, FINISH (stop reading these steps).
+        3.) Use mmap() to reallocate the memory space with the address we loaded
+        4.) Using the npages we found, copy an appropriate amount of data into 
+            this reconstructed memory segment
+        5.) Log the original file offset of this block so that we know where to
+            save data towards next time data is written to this block
+        6.) Insert the new page into our bookkeeping data structures
+        7.) GOTO (1).
+
+    Once we have loaded all the pages we could successfully fetch from the file,
+    we wrap up initialization using our finishing routines:
+
+        1.) The metadata will (eventually) contain a list of system resources 
+            which need to be reallocated. 
+
+            - Mutexes, semaphores, special file descriptors (sockets, eventfd, 
+              mqueue), and the like each count as time-independent resources. 
+
+            - Threads, sockets and the like each count as time-dependent 
+              resources.
+
+        2.) First, reinitialize each time-independent resource. After all 
+            time-independent resources are reinitalized, we can then reallocate
+            all time-dependent resources in the order they were originally 
+            allocated.
+
+    It also follows that [crmalloc()] and [crfree()] both allocate and free from
+    this same pool of pagedata. 

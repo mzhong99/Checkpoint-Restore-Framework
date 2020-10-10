@@ -14,17 +14,20 @@ EXE = crheap_test
 
 all: $(EXE)
 
-run: all
+run: clean all
 	./$(EXE)
 
 commit: clean
-	git add *.h *.c Makefile
+	git add *.h *.c Makefile notes.txt
 	git commit
+
+push:
+	git push origin master
 
 memtest: all
 	valgrind --leak-check=full ./$(EXE)
 
-debug: all
+debug: clean all
 	gdb ./$(EXE)
 
 $(EXE): $(OBJ_CFILES)
