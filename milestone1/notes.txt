@@ -5,7 +5,8 @@ Team SIGSYS(31): Savannah Amos and Matthew Zhong
 
     The non-volatile file layout we will use is nothing but consecutive blocks 
     of memory with minimal metadata. Each block we place in this file looks like
-    the diagram below:
+    the diagram below. One call to nvstore_allocpage() shall create exactly one
+    new block of memory.
 
     Memory Layout of a Single Block
     +--------+--------+--------------------------------+
@@ -59,6 +60,90 @@ Team SIGSYS(31): Savannah Amos and Matthew Zhong
     memory manager which users should comfortably use in the form of 
     [crmalloc()], [crfree()], [crrealloc()], etc.
 
+    Once memory is allocated through nvstore_checkpoint(), we can access the
+    allocations as though it were a simple array of raw bytes. You can cast the
+    byte array to whatever pointer type you wish.
+
+    Accesses to data whether they are reads or writes shall cause the data to
+    encounter a page fault. The thread which accesses this data will temporarily
+    block for a split-second, and our userfautlfd handler will supply the 
+    calling thread with an appropriate page of memory to use. The handler will 
+    also log that the current page was accessed so that when we checkpoint 
+    later, we know what pages to save. See the diagram below for an example.
+
+        +---------+                             +---------+
+        | Calling |                             | Fault   |
+        | Thread  |                             | Handler |
+        |         |                             | Thread  |
+        +-+-------+                             +-+-------+
+          |                                       |
+          | <- char *str = nvstore_allocpage()    |
+          |                                       |
+          | <- strcpy(str, "thestring");          |
+          |    [PAGEFAULT, EXECUTION BLOCKED]     |
+          |                                       |
+          | YIELD to fault handler thread         |
+          | ---------------------------------->>> | <- execution yielded to 
+          |                                       |    fault handler
+          |                                       |
+          |                                       | <- log faulting address in
+          |                                       |    list of dirty addresses
+          |                                       |
+          |                                       | <- mmap() new page
+          |                                       |
+          |                                       | <- copy mmap()'d page into
+          |                                       |    faulted region
+          |                                       | 
+          |                                       | <- wait for next pagefault,
+          |                                       |    BLOCK ON UFFD READ
+          |               YIELD to calling thread |    
+          | <<<---------------------------------- |
+          |                                       |
+          | <- *str now actually has "thestring"  |
+          |    continue as usual                  |
+          V                                       V
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                  (time passes, calling thread continues execution)       
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+          |                                       |
+          | <- strcpy(str, "thestring2")          | <- execution STILL BLOCKED,
+          |    [NO PAGEFAULT]                     |    no uffd message is read
+          |    A page was already supplied to the |    
+          |    calling thread so no pagefault     |
+          |    happens anymore.                   |
+          V                                       V
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                  (time passes, calling thread continues execution)             
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+          |                                       |
+          | <- nvstore_checkpoint()               |
+          |    List of dirty addresses is         |
+          |    flushed. The page containing each  |
+          |    address is saved to non-volatile   |
+          |    memory.                            |
+          V                                       V
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                  (time passes, calling thread continues execution)             
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+          |                                       |
+          | <- char *str = nvstore_allocpage()    |
+          |                                       |
+          | <- strcpy(str, "thestring");          |
+          |    [PAGEFAULT, EXECUTION BLOCKED]     |
+          |                                       |
+          | YIELD to fault handler thread         |
+          | ---------------------------------->>> | <- execution yielded to 
+          |                                       |    fault handler (see above)
+          V                                       V
+
+    Upon checkpointing the system using nvstore_checkpoint(), the nvstore then
+    traverses through a list of addresses which were accessed by any of the 
+    calling threads. For each address, the page containing the address is 
+    written to non-volatile memory. After the offending pages are written, we 
+    then flush the pages so that the next time any address in the page is 
+    accessed, the access will pagefault and the same process we delineate above
+    will occur again.
+
     When we restore pages from the non-volatile filesystem, the procedure we use
     includes the following components:
 
@@ -89,5 +174,45 @@ Team SIGSYS(31): Savannah Amos and Matthew Zhong
             all time-dependent resources in the order they were originally 
             allocated.
 
+    In essence, what this means is that any calls to nvstore_allocpage() will 
+    return addresses to allocated memory which are persistent for as long as 
+    nvstore_shutdown() has not been called. Additionally, after 
+    nvstore_shutdown() is called, a subsequent call to nvstore_init() with the
+    same file as specifed the first time of invocation will result in the 
+    restoration of each previous allocation's integrity. Indeed, the following
+    example shows what should happen in our system:
+
+    Code example of simple usage:
+    ----------------------------------------------------------------------------
+
+        void example()
+        {
+            int *val_p;
+
+            nvstore_init("testfile.heap");  /* initializes nvstore */
+
+            val_p = nvstore_allocpage(3);   /* allocates three pages */
+            *val_p = 10;                    /* write 10 to the int ptr */
+
+            printf("val=%d\n", *val_p);     /* should print val=10 */
+
+            nvstore_shutdown();             /* after this, val_p is dangling */
+
+            printf("val=%d\n", *val_p);     /* REMOVE THIS LINE IN YOUR ACTUAL
+                                             * CODE - this would segfault since
+                                             * val_p is dangling */
+
+            nvstore_init("testfile.heap");  /* reinitialize nvstore - val_p 
+                                             * should now point to three pages 
+                                             * without ever changing the value
+                                             * of val_p itself */
+
+            printf("val=%d\n", *val_p);     /* should print val=10, val_p is no 
+                                             * longer dangling since it was
+                                             * reconstructed from the file */
+        }
+
     It also follows that [crmalloc()] and [crfree()] both allocate and free from
     this same pool of pagedata. 
+
+
