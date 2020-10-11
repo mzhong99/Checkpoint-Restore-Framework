@@ -1,9 +1,12 @@
+#include "unittest.h"
 #include "memcheck.h"
 
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdio.h>
+
+#include <locale.h>
 
 /******************************************************************************/
 /** Macros, Definitions, and Static Variables ------------------------------- */
@@ -25,11 +28,15 @@ struct mc_node
 struct mc_table
 {
     size_t nelem;
+    size_t btotal;
+    size_t nalloc;
+    size_t nfree;
     struct mc_node *data[TABLE_SIZE];
 };
 
 /* self instance for object-oriented access */
-static struct mc_table s_table = { .nelem = 0, .data = {0} };
+static struct mc_table s_table = 
+{ .nelem = 0, .btotal = 0, .nalloc = 0, .nfree = 0, .data = {0} };
 static struct mc_table *self = &s_table;
 
 /* hash function */
@@ -103,8 +110,11 @@ static bool mc_table_del(void *addr)
     {
         find = *it;
         *it = find->next;
-        mc_node_delete(find);
+
+        self->nfree++;
         self->nelem--;
+
+        mc_node_delete(find);
 
         return true;
     }
@@ -125,7 +135,10 @@ static void mc_table_insert(struct mc_node *node)
     hash = ptr_hash(node->addr);
     node->next = self->data[hash];
     self->data[hash] = node;
+
+    self->btotal += node->size * node->nmemb;
     self->nelem++;
+    self->nalloc++;
 }
 
 /******************************************************************************/
@@ -241,11 +254,29 @@ void mc_report()
     struct mc_node *chain;
     size_t i;
 
-    printf("MEMCHECK REPORT: %ld active allocations.\n", self->nelem);
+    setlocale(LC_NUMERIC, "");
+
+    printf(ANSI_COLOR_CYAN);
+
+    printf("================================================================================\n");
+    printf("Memory Check Analysis\n");
+    printf("================================================================================\n");
+
+    printf(ANSI_COLOR_RESET);
+
+    printf("%'ld un-freed allocations. %s\n", 
+            self->nelem, 
+            self->nelem == 0 ? ANSI_COLOR_GREEN "No leaks possible!" ANSI_COLOR_RESET 
+                             : ANSI_COLOR_RED "Memory was leaked :(" ANSI_COLOR_RESET);
+
+    printf("    Total Usage: %'ld bytes (%'ld allocations, %'ld frees)\n", 
+           self->btotal, self->nalloc, self->nfree);
 
     for (i = 0; i < TABLE_SIZE; i++)
         for (chain = self->data[i]; chain != NULL; chain = chain->next)
-            printf("Allocation: %p (%s) [size=%ld, nmemb=%ld]\n",
+            printf("Allocation: %p (%s) [size=%'ld, nmemb=%'ld]\n",
                    chain->addr, MC_TYPE_STR[chain->type], 
                    chain->size, chain->nmemb);
+
+    printf(ANSI_COLOR_RESET);
 }
