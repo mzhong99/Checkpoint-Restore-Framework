@@ -1,9 +1,9 @@
 #include "nvaddrtable.h"
+#include "memcheck.h"
 
 #include <unistd.h>
 #include <assert.h>
 
-#include <stdlib.h>
 #include <stdio.h>
 
 static struct nventry *__nvaddrtable_find(struct nvaddrtable *table, void *key)
@@ -30,20 +30,20 @@ static struct nventry *__nvaddrtable_find(struct nvaddrtable *table, void *key)
 
 struct nvaddrtable *nvaddrtable_new(size_t power)
 {
-    struct nvaddrtable *table = malloc(sizeof(*table));
+    struct nvaddrtable *table = mc_malloc(sizeof(*table));
 
     table->nelem = 0;
     table->cap = 1 << power;
 
-    table->entries = calloc(table->cap, sizeof(*table->entries));
+    table->entries = mc_calloc(table->cap, sizeof(*table->entries));
 
     return table;
 }
 
 void nvaddrtable_delete(struct nvaddrtable *table)
 {
-    free(table->entries);
-    free(table);
+    mc_free(table->entries);
+    mc_free(table);
 }
 
 void nvaddrtable_expand(struct nvaddrtable *table)
@@ -55,13 +55,13 @@ void nvaddrtable_expand(struct nvaddrtable *table)
     oldcap = table->cap;
 
     table->cap <<= 1;
-    table->entries = calloc(table->cap, sizeof(*table->entries));
+    table->entries = mc_calloc(table->cap, sizeof(*table->entries));
 
     for (i = 0; i < oldcap; i++)
         if (oldentries[i].value != NULL)
             nvaddrtable_insert(table, oldentries[i].value);
 
-    free(oldentries);
+    mc_free(oldentries);
 }
 
 void nvaddrtable_insert(struct nvaddrtable *table, struct nvblock *block)
