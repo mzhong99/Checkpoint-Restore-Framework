@@ -1,4 +1,5 @@
 #include "nvstore.h"
+#include "memcheck.h"
 
 #include <stdio.h>
 #include <stddef.h>
@@ -269,8 +270,9 @@ static int nvstore_initnvfs(const char *filename)
 static int nvstore_initmmap()
 {
     /* initialization of the empty page to be loaded in */
-    self->tmppage = mmap(NULL, sysconf(_SC_PAGE_SIZE), PROT_READ | PROT_WRITE,
-                         MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    self->tmppage = mc_mmap(NULL, sysconf(_SC_PAGE_SIZE), 
+                            PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS,
+                            -1, 0);
 
     if (self->tmppage == MAP_FAILED)
         return E_MMAP;
@@ -420,7 +422,7 @@ int nvstore_shutdown()
     nvaddrlist_delete(self->dirty);
     nvaddrtable_delete(self->table);
 
-    if (munmap(self->tmppage, sysconf(_SC_PAGE_SIZE)) != 0)
+    if (mc_munmap(self->tmppage, sysconf(_SC_PAGE_SIZE)) != 0)
         return E_MMAP;
 
     while (!list_empty(&self->blocks))

@@ -1,5 +1,6 @@
 #include "nvstore_test.h"
 #include "nvstore.h"
+#include "memcheck.h"
 
 #include <unistd.h>
 #include <stdint.h>
@@ -34,7 +35,7 @@ const char *test_nvstore_alloc_simple()
         return "Initialization failed.";
 
     data = nvstore_allocpage(SMALL_NUM_PAGES);
-    refdata = malloc(sysconf(_SC_PAGE_SIZE) * SMALL_NUM_PAGES);
+    refdata = mc_malloc(sysconf(_SC_PAGE_SIZE) * SMALL_NUM_PAGES);
 
     for (i = 0; i < sysconf(_SC_PAGE_SIZE); i++)
     {
@@ -50,7 +51,7 @@ const char *test_nvstore_alloc_simple()
     if (rc != 0)
         return "Shutdown failed.";
 
-    free(refdata);
+    mc_free(refdata);
     return NULL;
 }
 
@@ -65,7 +66,7 @@ const char *test_nvstore_alloc_complex()
 
     for (i = 0; i < LARGE_NUM_PAGES; i++)
     {
-        refdata = malloc(sysconf(_SC_PAGE_SIZE) * (i + 1));
+        refdata = mc_malloc(sysconf(_SC_PAGE_SIZE) * (i + 1));
         data = nvstore_allocpage(i + 1);
 
         for (j = 0; j < sysconf(_SC_PAGE_SIZE) * (i + 1); j++)
@@ -78,7 +79,7 @@ const char *test_nvstore_alloc_complex()
             if (data[j] != refdata[j])
                 return "Data contents do not match";
 
-        free(refdata);
+        mc_free(refdata);
     }
 
     rc = nvstore_shutdown();
@@ -97,7 +98,7 @@ const char *test_nvstore_checkpoint_simple()
     if (rc != 0)
         return "First initialization failed.";
 
-    refdata = malloc(sysconf(_SC_PAGE_SIZE));
+    refdata = mc_malloc(sysconf(_SC_PAGE_SIZE));
     data = nvstore_allocpage(1);
     
     for (i = 0; i < sysconf(_SC_PAGE_SIZE); i++)
@@ -128,7 +129,7 @@ const char *test_nvstore_checkpoint_simple()
     if (rc != 0)
         return "Second shutdown failed.";
 
-    free(refdata);
+    mc_free(refdata);
     return NULL;
 }
 
@@ -143,7 +144,7 @@ const char *test_nvstore_checkpoint_complex()
         if (rc != 0)
             return "First initialization failed.";
 
-        refdatamany[i] = malloc((i + 1) * sysconf(_SC_PAGE_SIZE));
+        refdatamany[i] = mc_malloc((i + 1) * sysconf(_SC_PAGE_SIZE));
         datamany[i] = nvstore_allocpage(i + 1);
 
         for (j = 0; j <= i; j++)
@@ -181,7 +182,7 @@ const char *test_nvstore_checkpoint_complex()
     }
 
     for (i = 0; i < LARGE_NUM_PAGES; i++)
-        free(refdatamany[i]);
+        mc_free(refdatamany[i]);
 
     return NULL;
 }

@@ -1,11 +1,11 @@
 #include "nvblock.h"
+#include "memcheck.h"
 
 #include <unistd.h>
 #include <sys/mman.h>
 
 #include <assert.h>
 
-#include <stdlib.h>
 #include <stddef.h>
 #include <stdio.h>
 
@@ -14,16 +14,16 @@ struct nvblock *nvblock_new(void *pgaddr, size_t npages, off_t offset)
     struct nvblock *block = NULL;
 
     assert(npages > 0);
-    block = malloc(sizeof(*block));
+    block = mc_malloc(sizeof(*block));
 
     block->offset = offset;
     block->offset_pgstart = block->offset 
         + sizeof(block->pgstart) + sizeof(block->npages);
 
     block->npages = npages;
-    block->pgstart = mmap(pgaddr, npages * sysconf(_SC_PAGE_SIZE), 
-                          PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 
-                          -1, 0);
+    block->pgstart = mc_mmap(pgaddr, npages * sysconf(_SC_PAGE_SIZE), 
+                             PROT_READ | PROT_WRITE, 
+                             MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 
     if (pgaddr != NULL)
         assert(pgaddr == block->pgstart);
@@ -33,8 +33,8 @@ struct nvblock *nvblock_new(void *pgaddr, size_t npages, off_t offset)
 
 void nvblock_delete(struct nvblock *block)
 {
-    munmap(block->pgstart, block->npages * sysconf(_SC_PAGE_SIZE));
-    free(block);
+    mc_munmap(block->pgstart, block->npages * sysconf(_SC_PAGE_SIZE));
+    mc_free(block);
 }
 
 off_t nvblock_nvfsize(struct nvblock *block)
