@@ -1,0 +1,301 @@
+================================================================================
+Persistent User Programs [Milestone 1]: A Checkpoint / Restore Framework
+Team SIGSYS(31): Savannah Amos and Matthew Zhong
+================================================================================
+
+    The non-volatile file layout we will use is nothing but consecutive blocks 
+    of memory with minimal metadata. Each block we place in this file looks like
+    the diagram below. One call to nvstore_allocpage() shall create exactly one
+    new block of memory.
+
+    Memory Layout of a Single Block
+    +--------+--------+--------------------------------+
+    |  addr  | npages | <--------- pagedata ---------> |
+    +--------+--------+--------------------------------+
+
+    For the sake of brevity, we will use the following abbreviations and 
+    definitions in the table below:
+
+    +----------------+---------------------------------------------------------+
+    | Name (Abbrev.) | Description                                             |
+    +----------------+---------------------------------------------------------+
+    | addr       (A) | The virtual memory address denoting the start of the    |
+    |                | page from the last time the code was executed.          |
+    +----------------+---------------------------------------------------------+
+    | npages     (P) | The number of pages in this memory address. To compute  |
+    |                | the number of BYTES which were saved, multiply this     |
+    |                | number by the pagesize, accessible in <unistd.h> using  |
+    |                | the function [sysconf(_SC_PAGE_SIZE)].                  |
+    +----------------+---------------------------------------------------------+
+    | pagedata   (D) | The actual memory stored and to be loaded back in upon  |
+    |                | restoration.                                            |
+    +----------------+---------------------------------------------------------+
+
+    It follows that the entire file would look something like this:
+
+    Memory Layout of Entire File               (file continues indefinitiely)
+    +---+---+--------------+---+---+---------+---+---+------+--------------->
+    | A | P | D            | A | P | D       | A | P | D    | A | P | D ---->
+    +---+---+--------------+---+---+---------+---+---+------+--------------->
+    <------ metadata ------>
+
+    You're probably wondering, "Where did the metadata chunk from the original
+    design document go?" The simple answer is that we've instead chosen to store
+    the metadata inside of the very first pagedata segment of the first memory
+    block. This in effect simplifies the memory checkpointing and restoration 
+    process - the only thing we ever concern ourselves with is simply 
+    non-volatile blocks of memory.
+
+    When we allocate new pages of memory using nvstore_allocpage(), the 
+    procedure we use includes the following components:
+
+        1.) Use mmap() to request the kernel to map out some memory space for us
+        2.) Insert the new page into our bookkeeping data structures
+        3.) Add a non-volatile representation of the page to our filesystem
+        4.) Save the current file offset of this block in volatile memory
+        5.) Return the pagedata start to the user memory allocator [crmalloc()]
+
+    This page allocation has NO free() variant - once memory is allocated, it 
+    STAYS allocated in the file. To solve this issue, we have also created a 
+    memory manager which users should comfortably use in the form of 
+    [crmalloc()], [crfree()], [crrealloc()], etc.
+
+    Once memory is allocated through nvstore_checkpoint(), we can access the
+    allocations as though it were a simple array of raw bytes. You can cast the
+    byte array to whatever pointer type you wish.
+
+    Accesses to data whether they are reads or writes shall cause the data to
+    encounter a page fault. The thread which accesses this data will temporarily
+    block for a split-second, and our userfautlfd handler will supply the 
+    calling thread with an appropriate page of memory to use. The handler will 
+    also log that the current page was accessed so that when we checkpoint 
+    later, we know what pages to save. See the diagram below for an example.
+
+        +---------+                             +---------+
+        | Calling |                             | Fault   |
+        | Thread  |                             | Handler |
+        |         |                             | Thread  |
+        +-+-------+                             +-+-------+
+          |                                       |
+          | <- char *str = nvstore_allocpage()    |
+          |                                       |
+          | <- strcpy(str, "thestring");          |
+          |    [PAGEFAULT, EXECUTION BLOCKED]     |
+          |                                       |
+          | YIELD to fault handler thread         |
+          | ---------------------------------->>> | <- execution yielded to 
+          |                                       |    fault handler
+          |                                       |
+          |                                       | <- log faulting address in
+          |                                       |    list of dirty addresses
+          |                                       |
+          |                                       | <- mmap() new page
+          |                                       |
+          |                                       | <- copy mmap()'d page into
+          |                                       |    faulted region
+          |                                       | 
+          |                                       | <- wait for next pagefault,
+          |                                       |    BLOCK ON UFFD READ
+          |               YIELD to calling thread |    
+          | <<<---------------------------------- |
+          |                                       |
+          | <- *str now actually has "thestring"  |
+          |    continue as usual                  |
+          V                                       V
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                  (time passes, calling thread continues execution)       
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+          |                                       |
+          | <- strcpy(str, "thestring2")          | <- execution STILL BLOCKED,
+          |    [NO PAGEFAULT]                     |    no uffd message is read
+          |    A page was already supplied to the |    
+          |    calling thread so no pagefault     |
+          |    happens anymore.                   |
+          V                                       V
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                  (time passes, calling thread continues execution)             
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+          |                                       |
+          | <- nvstore_checkpoint()               |
+          |    List of dirty addresses is         |
+          |    flushed. The page containing each  |
+          |    address is saved to non-volatile   |
+          |    memory.                            |
+          V                                       V
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                  (time passes, calling thread continues execution)             
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+          |                                       |
+          | <- char *str = nvstore_allocpage()    |
+          |                                       |
+          | <- strcpy(str, "thestring");          |
+          |    [PAGEFAULT, EXECUTION BLOCKED]     |
+          |                                       |
+          | YIELD to fault handler thread         |
+          | ---------------------------------->>> | <- execution yielded to 
+          |                                       |    fault handler (see above)
+          V                                       V
+
+    Upon checkpointing the system using nvstore_checkpoint(), the nvstore then
+    traverses through a list of addresses which were accessed by any of the 
+    calling threads. For each address, the page containing the address is 
+    written to non-volatile memory. After the offending pages are written, we 
+    then flush the pages so that the next time any address in the page is 
+    accessed, the access will pagefault and the same process we delineate above
+    will occur again.
+
+    When we restore pages from the non-volatile filesystem, the procedure we use
+    includes the following components:
+
+        1.) Attempt to fetch one memory block's worth of non-volatile data
+        2.) If fetch failed, FINISH (stop reading these steps).
+        3.) Use mmap() to reallocate the memory space with the address we loaded
+        4.) Using the npages we found, copy an appropriate amount of data into 
+            this reconstructed memory segment
+        5.) Log the original file offset of this block so that we know where to
+            save data towards next time data is written to this block
+        6.) Insert the new page into our bookkeeping data structures
+        7.) GOTO (1).
+
+    Once we have loaded all the pages we could successfully fetch from the file,
+    we wrap up initialization using our finishing routines:
+
+        1.) The metadata will (eventually) contain a list of system resources 
+            which need to be reallocated. 
+
+            - Mutexes, semaphores, special file descriptors (sockets, eventfd, 
+              mqueue), and the like each count as time-independent resources. 
+
+            - Threads, sockets and the like each count as time-dependent 
+              resources.
+
+        2.) First, reinitialize each time-independent resource. After all 
+            time-independent resources are reinitalized, we can then reallocate
+            all time-dependent resources in the order they were originally 
+            allocated.
+
+    In essence, what this means is that any calls to nvstore_allocpage() will 
+    return addresses to allocated memory which are persistent for as long as 
+    nvstore_shutdown() has not been called. Additionally, after 
+    nvstore_shutdown() is called, a subsequent call to nvstore_init() with the
+    same file as specifed the first time of invocation will result in the 
+    restoration of each previous allocation's integrity. Indeed, the following
+    example shows what should happen in our system:
+
+    Code example of simple usage:
+    ----------------------------------------------------------------------------
+
+        void example()
+        {
+            int *val_p;
+
+            nvstore_init("testfile.heap");  /* initializes nvstore */
+
+            val_p = nvstore_allocpage(3);   /* allocates three pages */
+            *val_p = 10;                    /* write 10 to the int ptr */
+
+            printf("val=%d\n", *val_p);     /* should print val=10 */
+
+            nvstore_shutdown();             /* after this, val_p is dangling */
+
+            printf("val=%d\n", *val_p);     /* REMOVE THIS LINE IN YOUR ACTUAL
+                                             * CODE - this would segfault since
+                                             * val_p is dangling */
+
+            nvstore_init("testfile.heap");  /* reinitialize nvstore - val_p 
+                                             * should now point to three pages 
+                                             * without ever changing the value
+                                             * of val_p itself */
+
+            printf("val=%d\n", *val_p);     /* should print val=10, val_p is no 
+                                             * longer dangling since it was
+                                             * reconstructed from the file */
+        }
+
+    It also follows that [crmalloc()] and [crfree()] both allocate and free from
+    this same pool of pagedata. 
+
+================================================================================
+Persistent User Programs [Milestone 2]: A Checkpoint / Restore Framework
+Team SIGSYS(31): Savannah Amos and Matthew Zhong
+================================================================================
+
+    We will need to inevitably allocate and manage a non-volatile representation
+    of a variety of system resources. We plan to create wrappers which manage
+    non-volatile allocations and access. The POSIX libraries we will support out
+    of the box include the following:
+
+        +-------------+-----------------+
+        | PTHREADS    |  <pthread.h>    |
+        | FILES       |  <stdio.h>      |
+        | SOCKETS     |  <sys/socket.h> |
+        | SEMAPHORES  |  <semaphore.h>  |
+        +-------------+-----------------+
+
+    We will link these resources in their own separate linked lists. For 
+    example, when the user requests to spawn a new thread, we will wrap the
+    [pthread_create()] function into [crpthread_create()] instead. In the 
+    metadata block, we will create a (synchronous) linked list which looks like
+    the diagram below:
+
+    Resource Allocation Diagram
+    ---------------------------
+
+     Non-Volatile       Non-Volatile
+     Metadata           Data (In nvheap)
+    +-------------+
+    | Thread      |
+    | List Lock   |
+    +-------------+     +--------+--------+     +--------+--------+     +------>
+    | Thread List | --> | Thread | Thread | --> | Thread | Thread | --> | 
+    |             | <-- | Handle | Attrs  | <-- | Handle | Attrs  | <-- | 
+    +-------------+     +--+-----+--------+     +--+-----+--------+     +------>
+    |             |        |                       |         
+    |             |        V                       V
+    |             |     +-------+---------+     +-------+---------+
+    |             |     | Stack | jmp_buf |     | Stack | jmp_buf |
+    |             |     +-------+---------+     +-------+---------+
+    |             |     | Task Function   |     | Task Function   |
+    |             |     +-----------+-----+     +-----------+-----+
+    |             |     | pthread_t | ... |     | pthread_t | ... |
+    |             |     +-----------+-----+     +-----------+-----+
+    |             |
+    |             |
+    |             |
+    +-------------+
+    | Mutex       |
+    | List Lock   |
+    +-------------+     +--------+-------+     +--------+-------+     +-------->
+    | Mutex List  | --> | Mutex  | Mutex | --> | Mutex  | Mutex | --> | 
+    |             | <-- | Handle | Attrs | <-- | Handle | Attrs | <-- | 
+    +-------------+     +--+-----+-------+     +--+-----+-------+     +-------->
+    |             |        |                      |
+    |             |        V                      V
+    |             |     +---------+-------+    +---------+-------+
+    |             |     | Locked? | Whom? |    | Locked? | Whom? |
+    |             |     +---------+-------+    +---------+-------+
+    |             |
+    |             |
+    |             |
+    +-------------+
+    | FILE        |
+    | List Lock   |
+    +-------------+     +--------+-------+     +--------+-------+     +-------->
+    | FILE List   | --> | File   | File  | --> | File   | File  | --> | 
+    |             | <-- | Handle | Attrs | <-- | Handle | Attrs | <-- | 
+    +-------------+     +--+-----+-------+     +--+-----+-------+     +-------->
+    |             |        |                      |
+    |             |        V                      V
+    |             |     +----------+-------+    +----------+-------+
+    |             |     | Filename | Perms |    | Filename | Perms |
+    |             |     +-------+--+-------+    +-------+--+-------+
+    |             |     | off_t | ...      |    | off_t | ...      |
+    |             |     +-------+----------+    +-------+----------+
+    |             |
+    V             V
+
+    The idea is to store metadata for system resources as appropriate on top of
+    the actual resource which was allocated. Inevitably, if the system crashes,
+    we hope to have stored enough information that our restoration routine can
+    successfully reallocate these resources using only what was saved.
+
