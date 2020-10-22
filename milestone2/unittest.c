@@ -22,10 +22,10 @@ void run_test(const char *(*test)(), const char *name, const char *description)
     message = test();
 
     if (message == NULL)
-        printf(ANSI_COLOR_GREEN "PASS!\n" ANSI_COLOR_RESET);
+        printf(ANSI_COLOR_GREEN "PASS!" ANSI_COLOR_RESET "\n");
     else
     {
-        printf(ANSI_COLOR_RED "FAIL!\n" ANSI_COLOR_RESET);
+        printf(ANSI_COLOR_RED "FAIL!" ANSI_COLOR_RESET "\n");
         printf("    Message: %s\n", message);
     }
 }

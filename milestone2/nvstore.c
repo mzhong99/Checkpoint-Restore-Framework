@@ -35,16 +35,6 @@
 /** Macros, Definitions, and Static Variables: nvstore ---------------------- */
 /******************************************************************************/
 
-/* metadata for non-volatile storage - each element is saved to file */
-struct nvmetadata
-{
-    uint32_t writelock;     /* set to 0 when writing and reset to 1 when done */
-    struct list sysres;     /* list of system resources                       */
-};
-
-/* used to manually control the write lock for the metadata */
-static void nvmetadata_lock(struct nvmetadata *meta);
-static void nvmetadata_unlock(struct nvmetadata *meta);
 
 /* non-volatile storage manager struct */
 struct nvstore
@@ -89,9 +79,9 @@ static struct nvblock *nvstore_fetchnvfs();
 static struct nvblock *__nvstore_allocpage(size_t size, void *addr);
 
 /******************************************************************************/
-/** Private Implementation: nvmetadata -------------------------------------- */
+/** Public-Facing API: nvmetadata ------------------------------------------- */
 /******************************************************************************/
-static void nvmetadata_lock(struct nvmetadata *meta)
+void nvmetadata_lock(struct nvmetadata *meta)
 {
     struct nvblock *metablock;
 
@@ -104,7 +94,7 @@ static void nvmetadata_lock(struct nvmetadata *meta)
     fflush(self->nvfs);
 }
 
-static void nvmetadata_unlock(struct nvmetadata *meta)
+void nvmetadata_unlock(struct nvmetadata *meta)
 {
     struct nvblock *metablock;
 
@@ -115,6 +105,11 @@ static void nvmetadata_unlock(struct nvmetadata *meta)
     fwrite(&meta->writelock, 1, sizeof(meta->writelock), 
            self->nvfs);
     fflush(self->nvfs);
+}
+
+struct nvmetadata *nvmetadata_instance()
+{
+    return self->meta;
 }
 
 /******************************************************************************/
@@ -328,7 +323,11 @@ static void nvstore_initmeta()
         /* if no metadata was found, create and init a new metadata block */
         metablock = __nvstore_allocpage(1, NULL);
         self->meta = metablock->pgstart;
-        list_init(&self->meta->sysres);
+
+        /* upon first init, we initialize the lists and the writelock as well */
+        nvmetadata_unlock(self->meta);
+        list_init(&self->meta->threadlist);
+        list_init(&self->meta->mutexlist);
     }
     else
     {
@@ -338,6 +337,10 @@ static void nvstore_initmeta()
     }
 
     fflush(self->nvfs);
+
+    /* use volatile locks for system resources - reinitialize on every boot */
+    pthread_mutex_init(&self->meta->threadlock, NULL);
+    pthread_mutex_init(&self->meta->mutexlock, NULL);
 };
 
 /**

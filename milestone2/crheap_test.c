@@ -8,6 +8,7 @@
 #include "nvaddrtable_test.h"
 #include "nvstore_test.h"
 #include "memcheck_test.h"
+#include "crmalloc_test.h"
 
 /**
  * Usually, I try to keep a strict line limit of 80 characters. This is the only
@@ -53,6 +54,12 @@ void run_all_tests()
     run_test(test_memcheck_malloc_complex, "memcheck", "Complex mc_malloc() usage");
     run_test(test_memcheck_mmap_simple, "memcheck", "mc_mmap() and mc_munmap() usage");
     run_test(test_memcheck_complex, "memcheck", "Allocations with mc_malloc() and mc_mmap()");
+
+    /**************************************************************************/
+    /** Tests: crmalloc ----------------------------------------------------- */
+    /**************************************************************************/
+    run_test(test_crmalloc_simple, "crmalloc", "Basic crmalloc() and crfree()");
+    run_test(test_crmalloc_complex, "crmalloc", "Complex crmalloc() and crfree()");
 
     mc_report();
 }
