@@ -15,7 +15,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#include "nvstore.h"
+#include <nvmm/nvstore.h>
 
 /******************************************************************************/
 /** Macros, Definitions, and Static Variables ------------------------------- */

@@ -1,5 +1,9 @@
 PROJDIR = .
+
 SRC_CFILES = $(shell find $(PROJDIR) -type f -name "*.c")
+SRC_HFILES = $(shell find $(PROJDIR) -type f -name "*.h")
+SRC_SUBDIRS = $(shell find $(PROJDIR) -type d)
+
 OBJ_CFILES = $(patsubst %.c, %.o, $(SRC_CFILES))
 GCOV_CFILES = $(patsubst %.c, %.c.gcov, $(SRC_CFILES))
 GCDA_CFILES = $(patsubst %.c, %.gcda, $(SRC_CFILES))
@@ -10,11 +14,12 @@ DEFAULT_NVFILE = "heapfile.heap"
 DEL = rm -f
 CC = gcc
 
-DEBUG_FLAGS = -fprofile-arcs -ftest-coverage -ggdb3 -O0
+DEBUG_FLAGS = -coverage -ggdb3 -O0
 WARN_FLAGS = -Wall -Wextra
 
-CFLAGS = -std=gnu99 $(WARN_FLAGS) $(DEBUG_FLAGS)
+CFLAGS = -std=gnu99 $(WARN_FLAGS) $(DEBUG_FLAGS) 
 LFLAGS = -pthread
+IFLAGS = $(addprefix -I, $(SRC_SUBDIRS))
 
 EXE = crheap_test
 
@@ -26,7 +31,7 @@ run: all
 	./$(EXE)
 
 commit: clean
-	git add *.h *.c Makefile notes.txt
+	git add $(SRC_CFILES) $(SRC_HFILES) Makefile notes.txt
 	git commit
 
 push:
@@ -40,14 +45,14 @@ debug: all
 
 $(EXE): $(OBJ_CFILES)
 	@echo "[LINK] $(EXE)"
-	@$(CC) $(CFLAGS) $(LFLAGS) $(OBJ_CFILES) -o $(EXE)
+	@$(CC) $(CFLAGS) $(LFLAGS) $(IFLAGS) $(OBJ_CFILES) -o $(EXE)
 	@echo "[BUILD] completed."
 
 %.o: %.c
 	@echo "[CC] $<"
-	@$(CC) $(CFLAGS) -c $< -o $@
+	@$(CC) $(CFLAGS) $(IFLAGS) -c $< -o $@
 
-coverage: run
+coverage: run 
 	@echo "[COV]"
 	@gcov $(SRC_CFILES)
 
@@ -62,6 +67,6 @@ clean:
 	@$(DEL) $(EXE) $(DEFAULT_NVFILE) vgcore* *.heap 
 	
 	@echo "[DEL] GCOV files (*.gcov, *.gcda, *.gcno)"
-	@$(DEL) $(GCOV_CFILES) $(GCDA_CFILES) $(GCNO_CFILES)
+	@$(DEL) $(GCOV_CFILES) $(GCDA_CFILES) $(GCNO_CFILES) *.c.gcov
 	
 	@echo "[CLEAN] completed."
