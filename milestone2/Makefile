@@ -18,7 +18,7 @@ LFLAGS = -lpthread
 
 EXE = crheap_test
 
-.PHONY: all clean run coverage
+.PHONY: all clean run coverage ctags
 
 all: $(EXE)
 
@@ -48,7 +48,11 @@ $(EXE): $(OBJ_CFILES)
 	@$(CC) $(CFLAGS) -c $< -o $@
 
 coverage: run
-	gcov $(SRC_CFILES)
+	@echo "[COV]"
+	@gcov $(SRC_CFILES)
+
+ctags:
+	ctags -R .
 
 clean:
 	@echo "[DEL] OBJ files (*.o)"
