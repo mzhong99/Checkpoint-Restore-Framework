@@ -220,6 +220,10 @@ Persistent User Programs [Milestone 2]: A Checkpoint / Restore Framework
 Team SIGSYS(31): Savannah Amos and Matthew Zhong
 ================================================================================
 
+    ----------------------------------------------------------------------------
+    Introduction
+    ----------------------------------------------------------------------------
+
     We will need to inevitably allocate and manage a non-volatile representation
     of a variety of system resources. We plan to create wrappers which manage
     non-volatile allocations and access. The POSIX libraries we will support out
@@ -299,3 +303,20 @@ Team SIGSYS(31): Savannah Amos and Matthew Zhong
     we hope to have stored enough information that our restoration routine can
     successfully reallocate these resources using only what was saved.
 
+    ----------------------------------------------------------------------------
+    A Threading Library (crthreads)
+    ----------------------------------------------------------------------------
+
+    The design of our threading library effectively wraps the pthread library
+    into using our non-volatile memory system instead. Some of the design issues
+    which require special consideration include each of the following:
+
+    1.) Our main goal is to checkpoint and restore this thread. What data do we
+        need to store in non-volatile memory to reconstruct this object?
+
+    2.) Do we necessarily need to store everything in non-volatile memory? What
+        if we can store some of the data in volatile or transient fields and 
+        reconstruct those fields when the thread is to be restored?
+
+    At a very minimum, we'll need to store the thread stack, its task function,
+    and its input argument. 

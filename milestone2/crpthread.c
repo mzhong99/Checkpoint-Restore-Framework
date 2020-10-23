@@ -20,6 +20,7 @@ struct crthread
     /* ---------------------------------------------------------------------- */
     struct list_elem elem;          /* used for insertions into threadlist    */
     jmp_buf checkpoint;             /* save regs for checkpoint using setjmp  */
+    bool firstrun;                  /* skip restoration on first run          */
 
     /* normal thread variables                                                */
     /* ---------------------------------------------------------------------- */
@@ -28,60 +29,114 @@ struct crthread
 
     void *(*taskfunc) (void *);     /* task / thread function                 */
     void *arg;                      /* input arg - MUST be from crmalloc()    */
-    void *retval;                   /* return value from thread execution     */
 
-    crpthread_t ptid;               /* the original thread ID variable        */
-    crpthread_attr_t attr;          /* attributes for respawning the thread   */
+    /* transient fields - values must be restored after a crash with syscalls */
+    /* ---------------------------------------------------------------------- */
+    pthread_t ptid;                 /* the original thread ID variable        */
 };
 
-static struct crthread *crthread_new(const crpthread_attr_t *attr, 
-                                     void *(*taskfunc) (void *), void *arg);
+static struct crthread *crthread_new(void *(*taskfunc) (void *), void *arg);
 static void crthread_delete(struct crthread *thread);
+
+/* used as a wrapper for restoration hook on subsequent runs */
+static void *crthread_taskfunc(void *thread_vp);
 
 /******************************************************************************/
 /** Private Implementation -------------------------------------------------- */
 /******************************************************************************/
-static struct crthread *crthread_new(const crpthread_attr_t *attr, 
-                                     void *(*taskfunc) (void *), void *arg)
+static struct crthread *crthread_new(void *(*taskfunc) (void *), void *arg)
 {
-    struct crthread *thread;
+    struct crthread *crthread;
     struct nvmetadata *meta;
 
     meta = nvmetadata_instance();
 
-    thread = crmalloc(sizeof(*thread));
-    thread->stacksize = DEFAULT_STACKSIZE;
+    crthread = crmalloc(sizeof(*crthread));
+    crthread->stacksize = DEFAULT_STACKSIZE;
+    crthread->stack = crmalloc(crthread->stacksize);
 
-    thread->taskfunc = taskfunc;
-    thread->arg = arg;
-    thread->retval = NULL;
+    crthread->taskfunc = taskfunc;
+    crthread->arg = arg;
 
-    thread->ptid = -1;
-    if (attr != NULL)
-        thread->attr = *attr;
+    crthread->firstrun = true;
+    crthread->ptid = -1;
 
     pthread_mutex_lock(&meta->threadlock);
-    list_push_back(&meta->threadlist, &thread->elem);
+    list_push_back(&meta->threadlist, &crthread->elem);
     pthread_mutex_unlock(&meta->threadlock);
 
-    return thread;
+    return crthread;
 }
 
-static void crthread_delete(struct crthread *thread)
+static void crthread_delete(struct crthread *crthread)
 {
-    crfree(thread->stack);
-    crfree(thread);
+    struct nvmetadata *meta;
+
+    meta = nvmetadata_instance();
+
+    pthread_mutex_lock(&meta->threadlock);
+    list_remove(&crthread->elem);
+    pthread_mutex_unlock(&meta->threadlock);
+
+    crfree(crthread->stack);
+    crfree(crthread);
+}
+
+static void *crthread_taskfunc(void *crthread_vp)
+{
+    struct crthread *crthread = crthread_vp;
+    void *retval;
+
+    if (crthread->firstrun)
+    {
+        crthread->firstrun = false;
+        retval = crthread->taskfunc(crthread->arg);
+    }
+    else
+        longjmp(crthread->checkpoint, 1);
+
+    return retval;
 }
 
 /******************************************************************************/
 /** Public-Facing API ------------------------------------------------------- */
 /******************************************************************************/
-int crpthread_create(crpthread_t *crptid, const crpthread_attr_t *attr,
-                     void *(*start_routine) (void *), void *arg)
+int crpthread_create(crpthread_t *crptid, void *(*routine) (void *), void *arg)
 {
-    struct crthread *thread;
+    struct crthread *crthread;
+    pthread_attr_t attrs;
+    int rc;
 
-    thread = crthread_new(attr, start_routine, arg);
+    crthread = crthread_new(routine, arg);
+    *crptid = &crthread->ptid;
 
-    return 0;
+    rc = pthread_attr_init(&attrs);
+    if (rc != 0)
+        goto fail;
+
+    rc = pthread_attr_setstack(&attrs, crthread->stack, crthread->stacksize);
+    if (rc != 0)
+        goto fail;
+
+    return pthread_create(&crthread->ptid, &attrs, crthread_taskfunc, crthread);
+
+fail:
+    crthread_delete(crthread);
+    return rc;
 }
+
+int crpthread_join(crpthread_t thread, void **retval)
+{
+    struct crthread *crthread;
+    int rc;
+
+    crthread = container_of(thread, struct crthread, ptid);
+    rc = pthread_join(crthread->ptid, retval);
+
+    if (rc != 0)
+        return rc;
+
+    crthread_delete(crthread);
+    return rc;
+}
+

@@ -23,9 +23,6 @@
 #define CRPRINTF_BUFLEN     256
 #define DEFAULT_NVFILE      "heapfile.heap"
 
-#define container_of(PTR, STRUCT_TYPE, MEMBER_NAME) \
-    (STRUCT_TYPE *)((uint8_t *)(PTR) - offsetof(STRUCT_TYPE, MEMBER_NAME))
-
 struct block
 {
     bool allocated;

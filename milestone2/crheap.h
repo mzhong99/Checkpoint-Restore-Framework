@@ -28,6 +28,9 @@
 #include <stdarg.h>
 #include <stdint.h>
 
+#define container_of(PTR, STRUCT_TYPE, MEMBER_NAME) \
+    (STRUCT_TYPE *)((uint8_t *)(PTR) - offsetof(STRUCT_TYPE, MEMBER_NAME))
+
 /** 
  * Used to initialize the non-volatile heap system. This initializes any 
  * important heap data structures and the file-backing and manual memory map for

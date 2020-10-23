@@ -14,7 +14,7 @@ DEBUG_FLAGS = -fprofile-arcs -ftest-coverage -ggdb3 -O0
 WARN_FLAGS = -Wall -Wextra
 
 CFLAGS = -std=gnu99 $(WARN_FLAGS) $(DEBUG_FLAGS)
-LFLAGS = -lpthread
+LFLAGS = -pthread
 
 EXE = crheap_test
 
