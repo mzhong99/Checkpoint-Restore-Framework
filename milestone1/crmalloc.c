@@ -1,12 +1,12 @@
-#include <unistd.h>
+#include <stdio.h>
 #include "crmalloc.h"
+#include "nvstore.h"
 
 /* Instance getter for memory manager */
 static struct memory_manager *mm_instance() {
     static struct memory_manager mm;
     static bool constructed = false;
     if (!constructed) {
-        const size_t PAGESIZE = (size_t) sysconf(_SC_PAGESIZE);
         list_init(&mm.free);
     }
     return &mm;
@@ -242,7 +242,7 @@ void cr_free(void *ptr) {
     if (ptr == NULL) { return; }
 
     // Instance getter
-    struct memory_manager *mm = mm_instance;
+    struct memory_manager *mm = mm_instance();
 
     // Get block from payload
     struct block *b = payload_to_block(ptr);

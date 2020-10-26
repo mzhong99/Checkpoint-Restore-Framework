@@ -1,4 +1,5 @@
 #include <stdbool.h>
+#include <unistd.h>
 #include "list.h"
 
 extern const size_t PAGESIZE;
@@ -24,6 +25,7 @@ struct block {
 
 /* Left boundary tag, list_elem, right boundary tag */
 #define METADATA_SIZE (sizeof(struct block) + (sizeof(union boundary_tag)))
+#define PAGESIZE (sysconf(_SC_PAGESIZE))
 
 void *cr_malloc(size_t);
 void cr_free(void *);
