@@ -1,39 +1,44 @@
 #include "vthreadtable.h"
 #include "macros.h"
+#include "vtslist.h"
 
-struct vthreadtable *vthreadtable_new()
+/******************************************************************************/
+/** Macros, Definitions, and Static Variables ------------------------------- */
+/******************************************************************************/
+#define VTHREADTABLE_SIZE       256
+
+/* Hash table - array of thread-safe list. Supports simultaneous insertions 
+ * and removals, but each removal MUST be conducted by just ONE thread. */
+struct vtslist table[VTHREADTABLE_SIZE];
+
+/******************************************************************************/
+/** Public-Facing API ------------------------------------------------------- */
+/******************************************************************************/
+void vthreadtable_init()
 {
     size_t i;
-    struct vthreadtable *table;
-
-    table = mc_malloc(sizeof(*table));
-
     for (i = 0; i < VTHREADTABLE_SIZE; i++)
-        vtslist_init(&table->data[i]);
-
-    return table;
+        vtslist_init(&table[i]);
 }
 
-void vthreadtable_delete(struct vthreadtable *table)
+void vthreadtable_cleanup()
 {
     size_t i;
     for (i = 0; i < VTHREADTABLE_SIZE; i++)
-        vtslist_cleanup(&table->data[i]);
-
-    mc_free(table);
+        vtslist_cleanup(&table[i]);
 }
 
-void vthreadtable_insert(struct vthreadtable *table, struct crthread *handle)
+void vthreadtable_insert(struct crthread *handle)
 {
     struct vtslist *vtslist;
     size_t hash;
     
     hash = handle->ptid % VTHREADTABLE_SIZE;
-    vtslist = &table->data[hash];
+    vtslist = &table[hash];
     vtslist_push_back(vtslist, &handle->vtselem);
 }
 
-struct crthread *vthreadtable_find(struct vthreadtable *table, pthread_t id)
+struct crthread *vthreadtable_find(pthread_t id)
 {
     struct vtslist *vtslist;
 
@@ -44,7 +49,7 @@ struct crthread *vthreadtable_find(struct vthreadtable *table, pthread_t id)
     size_t hash;
 
     hash = id % VTHREADTABLE_SIZE;
-    vtslist = &table->data[hash];
+    vtslist = &table[hash];
 
     pthread_mutex_lock(&vtslist->lock);
 
@@ -68,11 +73,11 @@ struct crthread *vthreadtable_find(struct vthreadtable *table, pthread_t id)
     return fetch;
 }
 
-struct crthread *vthreadtable_remove(struct vthreadtable *table, pthread_t id)
+struct crthread *vthreadtable_remove(pthread_t id)
 {
     struct crthread *fetch;
 
-    fetch = vthreadtable_find(table, id);
+    fetch = vthreadtable_find(id);
     if (fetch != NULL)
         vtslist_remove(&fetch->vtselem);
 

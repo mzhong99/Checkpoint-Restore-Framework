@@ -37,6 +37,10 @@ void vtslist_push_front(struct vtslist *vtslist, struct vtslist_elem *vtselem);
 struct vtslist_elem *vtslist_pop_back(struct vtslist *vtslist);
 struct vtslist_elem *vtslist_pop_front(struct vtslist *vtslist);
 
+/** Simple non-blocking poll operations */
+struct vtslist_elem *vtslist_try_pop_back(struct vtslist *vtslist);
+struct vtslist_elem *vtslist_try_pop_front(struct vtslist *vtslist);
+
 /** Removes an element directly from the middle of a thread-safe list */
 void vtslist_remove(struct vtslist_elem *vtselem);
 

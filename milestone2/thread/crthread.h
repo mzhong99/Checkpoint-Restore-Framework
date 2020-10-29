@@ -2,7 +2,7 @@
 #define __CRPTHREAD_H__
 
 #include "list.h"
-#include "tslist.h"
+#include "vtslist.h"
 
 #include <pthread.h>
 #include <setjmp.h>

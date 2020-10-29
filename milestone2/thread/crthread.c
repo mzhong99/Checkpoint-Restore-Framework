@@ -6,6 +6,7 @@
 /** Macros, Definitions, and Static Variables ------------------------------- */
 /******************************************************************************/
 
+/* creation and deletion of non-volatile thread handles */
 static struct crthread *crthread_new(void *(*taskfunc) (void *), void *arg);
 static void crthread_delete(struct crthread *thread);
 

@@ -25,12 +25,13 @@
 #include <assert.h>
 #include <alloca.h>
 
-#include "list.h"
+#include "vtslist.h"
 
 #include "vaddrlist.h"
 #include "vblock.h"
-#include "vaddrtable.h"
+#include "vtsaddrtable.h"
 #include "crmalloc.h"
+#include "macros.h"
 
 /******************************************************************************/
 /** Macros, Definitions, and Static Variables: nvstore ---------------------- */
@@ -41,9 +42,7 @@ struct nvstore
 {
     /* bookkeeping data strctures                                             */
     /* ---------------------------------------------------------------------- */
-    struct list blocks;         /* master container of allocated pages        */
-    struct vaddrlist *dirty;    /* list of dirty pages to checkpoint          */
-    struct vaddrtable *table;   /* used to relocate block from raw page addr  */
+    struct vtslist blocks;      /* master container of allocated pages        */
 
     /* userfaultfd handler and file descriptors                               */
     /* ---------------------------------------------------------------------- */
@@ -51,6 +50,12 @@ struct nvstore
     int uffd;                   /* userfaultfd message file descriptor        */
     int killfd;                 /* killswitch for userfaultfd handler         */
     void *tmppage;              /* the mmapped page to load upon pagefault    */
+
+    /* checkpoint worker and associated data structures                       */
+    /* ---------------------------------------------------------------------- */
+    pthread_t crworker;         /* thread for handling requests to checkpoint */
+    struct vaddrlist *dirty;    /* list of dirty pages to checkpoint          */
+    struct vtsaddrtable *table;   /* used to relocate block from raw page addr  */
 
     /* non-volatile filesystem used to store data on checkpoint               */
     /* ---------------------------------------------------------------------- */
@@ -70,6 +75,7 @@ static void *nvstore_tf_uffdworker(__attribute__((unused))void *args);
 static int nvstore_initnvfs(const char *filename);
 static int nvstore_initmmap();
 static int nvstore_inituffdworker();
+static int nvstore_initcrworker();
 static void nvstore_initmeta();
 
 /** retrieves and allocates the next block from file, with bookkeeping */
@@ -86,7 +92,7 @@ void nvmetadata_lock(struct nvmetadata *meta)
     struct vblock *metablock;
 
     meta->writelock = 0;
-    metablock = vaddrtable_find(self->table, meta);
+    metablock = vtsaddrtable_find(self->table, meta);
 
     fseek(self->nvfs, metablock->offset_pgstart, SEEK_SET);
     fwrite(&meta->writelock, 1, sizeof(meta->writelock), 
@@ -99,7 +105,7 @@ void nvmetadata_unlock(struct nvmetadata *meta)
     struct vblock *metablock;
 
     meta->writelock = 1;
-    metablock = vaddrtable_find(self->table, meta);
+    metablock = vtsaddrtable_find(self->table, meta);
 
     fseek(self->nvfs, metablock->offset_pgstart, SEEK_SET);
     fwrite(&meta->writelock, 1, sizeof(meta->writelock), 
@@ -146,8 +152,8 @@ static struct vblock *__nvstore_allocpage(size_t npages, void *addr)
     self->filesize += vblock_nvfsize(block);
 
     /* insert the block into our bookkeeping data structures */
-    list_push_back(&self->blocks, &block->elem);
-    vaddrtable_insert(self->table, block);
+    vtslist_push_back(&self->blocks, &block->tselem);
+    vtsaddrtable_insert(self->table, block);
 
     /* finally, set up params to register the block to trigger pagefaults... */
     reg.range.start = (uintptr_t)block->pgstart;
@@ -238,9 +244,9 @@ static void *nvstore_tf_uffdworker(__attribute__((unused))void *args)
 static int nvstore_initnvfs(const char *filename)
 {
     /* initialization of container bookkeeping data structures */
-    list_init(&self->blocks);
+    vtslist_init(&self->blocks);
     self->dirty = vaddrlist_new(NVADDRLIST_INIT_POWER);
-    self->table = vaddrtable_new(NVADDRTABLE_INIT_POWER);
+    self->table = vtsaddrtable_new(NVADDRTABLE_INIT_POWER);
 
     /* initialization of non-volatile file - DO NOT USE APPEND; instead, try to
      * first open under read mode and if the file doesn't exist, reopen under
@@ -414,7 +420,7 @@ void *nvstore_allocpage(size_t npages)
 
 int nvstore_shutdown()
 {
-    struct list_elem *elem;
+    struct vtslist_elem *tselem;
     struct vblock *block;
     uint64_t postkill = 1;
 
@@ -424,16 +430,14 @@ int nvstore_shutdown()
     pthread_join(self->uffdworker, NULL);
 
     vaddrlist_delete(self->dirty);
-    vaddrtable_delete(self->table);
+    vtsaddrtable_delete(self->table);
 
     if (mc_munmap(self->tmppage, sysconf(_SC_PAGE_SIZE)) != 0)
         return E_MMAP;
 
-    while (!list_empty(&self->blocks))
+    while ((tselem = vtslist_try_pop_front(&self->blocks)) != NULL)
     {
-        elem = list_pop_back(&self->blocks);
-        block = list_entry(elem, struct vblock, elem);
-
+        block = container_of(tselem, struct vblock, tselem);
         vblock_delete(block);
     }
 
@@ -458,7 +462,7 @@ void nvstore_checkpoint()
     for (i = 0; i < self->dirty->len; i++)
     {
         addr = self->dirty->addrs[i];
-        block = vaddrtable_find(self->table, addr);
+        block = vtsaddrtable_find(self->table, addr);
 
         vblock_dumpbypage(block, self->nvfs, addr);
     }

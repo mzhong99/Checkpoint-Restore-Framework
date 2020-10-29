@@ -18,6 +18,8 @@ void run_test(const char *(*test)(), const char *name, const char *description)
 
     while (ndot --> 0)
         putchar('.');
+
+    fflush(stdout);
     
     message = test();
 

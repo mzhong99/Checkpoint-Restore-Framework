@@ -5,7 +5,7 @@
 
 #include "vaddrlist_test.h"
 #include "vblock_test.h"
-#include "vaddrtable_test.h"
+#include "vtsaddrtable_test.h"
 #include "nvstore_test.h"
 #include "memcheck_test.h"
 #include "crmalloc_test.h"
@@ -31,12 +31,12 @@ void run_all_tests()
     run_test(test_vblock_advanced, "vblock", "Advanced usage with varying page demands");
 
     /**************************************************************************/
-    /** Tests: vaddrtable --------------------------------------------------- */
+    /** Tests: vtsaddrtable --------------------------------------------------- */
     /**************************************************************************/
-    run_test(test_vaddrtable_init, "vaddrtable", "Basic initialization");
-    run_test(test_vaddrtable_basic_insertion, "vaddrtable", "Basic insertion for one block");
-    run_test(test_vaddrtable_expansion, "vaddrtable", "More insertions expand the table");
-    run_test(test_vaddrtable_large_entries, "vaddrtable", "Insertions of larger than one page");
+    run_test(test_vtsaddrtable_init, "vtsaddrtable", "Basic initialization");
+    run_test(test_vtsaddrtable_basic_insertion, "vtsaddrtable", "Basic insertion for one block");
+    run_test(test_vtsaddrtable_expansion, "vtsaddrtable", "More insertions expand the table");
+    run_test(test_vtsaddrtable_large_entries, "vtsaddrtable", "Insertions of larger than one page");
 
     /**************************************************************************/
     /** Tests: nvstore ------------------------------------------------------ */

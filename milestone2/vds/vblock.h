@@ -1,7 +1,7 @@
 #ifndef __NVBLOCK_H__
 #define __NVBLOCK_H__
 
-#include "list.h"
+#include "vtslist.h"
 
 #include <sys/types.h>
 #include <stddef.h>
@@ -39,14 +39,14 @@ struct vblock
 {
     /* basic housekeeping data                                                */
     /* ---------------------------------------------------------------------- */
-    struct list_elem elem;  /* so that we can insert into a linked list       */
-    size_t npages;          /* number of pages allocated in this block        */
-    void *pgstart;          /* the actual start of the page                   */
+    struct vtslist_elem tselem; /* so that we can insert into a vtslist       */
+    size_t npages;              /* number of pages allocated in this block    */
+    void *pgstart;              /* the actual start of the page               */
 
     /* offset data                                                            */
     /* ---------------------------------------------------------------------- */
-    off_t offset;           /* offset in file where block data is stored      */
-    off_t offset_pgstart;   /* offset in file where page data is stored       */
+    off_t offset;               /* offset in file where block data is stored  */
+    off_t offset_pgstart;       /* offset in file where page data is stored   */
 };
 
 /* constructor and destructor functions for a non-volatile block */

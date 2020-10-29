@@ -16,6 +16,7 @@
 #include <stdio.h>
 
 #include "nvstore.h"
+#include "vthreadtable.h"
 
 /******************************************************************************/
 /** Macros, Definitions, and Static Variables ------------------------------- */
@@ -37,6 +38,8 @@ int crheap_init(const char *filename)
     if (rc != 0)
         return rc;
 
+    vthreadtable_init();
+
     return 0;
 }
 
@@ -52,20 +55,9 @@ int crheap_shutdown()
     if (rc != 0)
         return rc;
 
+    vthreadtable_cleanup();
+
     return 0;
-}
-
-int crprintf(const char * __restrict fmt, ...)
-{
-    static char buffer[CRPRINTF_BUFLEN];
-    va_list list;
-    int nwrite;
-
-    va_start(list, fmt);
-    nwrite = vsnprintf(buffer, sizeof(buffer), fmt, list);
-    va_end(list);
-
-    return write(STDOUT_FILENO, buffer, nwrite);
 }
 
 int crheap_checkpoint()

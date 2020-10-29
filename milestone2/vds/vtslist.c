@@ -1,4 +1,4 @@
-#include "tslist.h"
+#include "vtslist.h"
 #include "macros.h"
 #include <stdbool.h>
 
@@ -80,6 +80,44 @@ struct vtslist_elem *vtslist_pop_front(struct vtslist *vtslist)
     elem = list_pop_front(&vtslist->list);
     tselem = container_of(elem, struct vtslist_elem, elem);
 
+    pthread_mutex_unlock(&vtslist->lock);
+
+    return tselem;
+}
+
+struct vtslist_elem *vtslist_try_pop_back(struct vtslist *vtslist)
+{
+    struct vtslist_elem *tselem = NULL;
+    struct list_elem *elem;
+
+    pthread_mutex_lock(&vtslist->lock);
+
+    if (list_empty(&vtslist->list))
+        goto unlock;
+
+    elem = list_pop_back(&vtslist->list);
+    tselem = container_of(elem, struct vtslist_elem, elem);
+
+unlock:
+    pthread_mutex_unlock(&vtslist->lock);
+
+    return tselem;
+}
+
+struct vtslist_elem *vtslist_try_pop_front(struct vtslist *vtslist)
+{
+    struct vtslist_elem *tselem = NULL;
+    struct list_elem *elem;
+
+    pthread_mutex_lock(&vtslist->lock);
+
+    if (list_empty(&vtslist->list))
+        goto unlock;
+
+    elem = list_pop_front(&vtslist->list);
+    tselem = container_of(elem, struct vtslist_elem, elem);
+
+unlock:
     pthread_mutex_unlock(&vtslist->lock);
 
     return tselem;
