@@ -4,12 +4,10 @@
 
 /* Instance getter for memory manager */
 static struct memory_manager *mm_instance() {
-    static struct memory_manager mm;
-    static bool constructed = false;
-    if (!constructed) {
-        list_init(&mm.free);
-    }
-    return &mm;
+    static struct nvmetadata *meta;
+
+    meta = nvmetadata_instance();
+    return &meta->mm;
 }
 
 /* Given tag, determine size of payload it guards */
@@ -218,6 +216,10 @@ static struct block *coalesce(struct block *b) {
 }
 
 /* ---------- USER INTERFACE ---------- */
+void mm_init(struct memory_manager *mm)
+{
+    list_init(&mm->free);
+}
 
 /* Return a usable block with given minimum size */
 void *crmalloc(size_t size) {

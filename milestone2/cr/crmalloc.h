@@ -1,8 +1,9 @@
+#ifndef __CRMALLOC_H__
+#define __CRMALLOC_H__
+
 #include <stdbool.h>
 #include <unistd.h>
 #include "list.h"
-
-extern const size_t PAGESIZE;
 
 struct memory_manager {
     struct list free;
@@ -27,6 +28,10 @@ struct block {
 #define METADATA_SIZE (sizeof(struct block) + (sizeof(union boundary_tag)))
 #define PAGESIZE (sysconf(_SC_PAGESIZE))
 
+void mm_init(struct memory_manager *mm);
+
 void *crmalloc(size_t);
 void crfree(void *);
 void *crrealloc(void *, size_t);
+
+#endif

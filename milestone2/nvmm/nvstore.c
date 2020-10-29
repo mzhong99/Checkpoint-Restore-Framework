@@ -30,6 +30,7 @@
 #include "vaddrlist.h"
 #include "vblock.h"
 #include "vaddrtable.h"
+#include "crmalloc.h"
 
 /******************************************************************************/
 /** Macros, Definitions, and Static Variables: nvstore ---------------------- */
@@ -53,7 +54,7 @@ struct nvstore
 
     /* non-volatile filesystem used to store data on checkpoint               */
     /* ---------------------------------------------------------------------- */
-    FILE* nvfs;                 /* file where the heap pages are stored       */
+    FILE *nvfs;                 /* file where the heap pages are stored       */
     off_t filesize;             /* size of file, tracked manually             */
     struct nvmetadata *meta;    /* metadata object                            */
 };
@@ -325,6 +326,7 @@ static void nvstore_initmeta()
 
         /* upon first init, we initialize the lists and the writelock as well */
         nvmetadata_unlock(self->meta);
+        mm_init(&self->meta->mm);
         list_init(&self->meta->threadlist);
         list_init(&self->meta->mutexlist);
     }
