@@ -27,9 +27,9 @@
 
 #include "list.h"
 
-#include "nvaddrlist.h"
+#include "vaddrlist.h"
 #include "nvblock.h"
-#include "nvaddrtable.h"
+#include "vaddrtable.h"
 
 /******************************************************************************/
 /** Macros, Definitions, and Static Variables: nvstore ---------------------- */
@@ -41,8 +41,8 @@ struct nvstore
     /* bookkeeping data strctures                                             */
     /* ---------------------------------------------------------------------- */
     struct list blocks;         /* master container of allocated pages        */
-    struct nvaddrlist *dirty;   /* list of dirty pages to checkpoint          */
-    struct nvaddrtable *table;  /* used to relocate block from raw page addr  */
+    struct vaddrlist *dirty;    /* list of dirty pages to checkpoint          */
+    struct vaddrtable *table;   /* used to relocate block from raw page addr  */
 
     /* userfaultfd handler and file descriptors                               */
     /* ---------------------------------------------------------------------- */
@@ -85,7 +85,7 @@ void nvmetadata_lock(struct nvmetadata *meta)
     struct nvblock *metablock;
 
     meta->writelock = 0;
-    metablock = nvaddrtable_find(self->table, meta);
+    metablock = vaddrtable_find(self->table, meta);
 
     fseek(self->nvfs, metablock->offset_pgstart, SEEK_SET);
     fwrite(&meta->writelock, 1, sizeof(meta->writelock), 
@@ -98,7 +98,7 @@ void nvmetadata_unlock(struct nvmetadata *meta)
     struct nvblock *metablock;
 
     meta->writelock = 1;
-    metablock = nvaddrtable_find(self->table, meta);
+    metablock = vaddrtable_find(self->table, meta);
 
     fseek(self->nvfs, metablock->offset_pgstart, SEEK_SET);
     fwrite(&meta->writelock, 1, sizeof(meta->writelock), 
@@ -146,7 +146,7 @@ static struct nvblock *__nvstore_allocpage(size_t npages, void *addr)
 
     /* insert the block into our bookkeeping data structures */
     list_push_back(&self->blocks, &block->elem);
-    nvaddrtable_insert(self->table, block);
+    vaddrtable_insert(self->table, block);
 
     /* finally, set up params to register the block to trigger pagefaults... */
     reg.range.start = (uintptr_t)block->pgstart;
@@ -186,7 +186,7 @@ static void nvstore_handle_pagefault()
     pgstart = (void *)((uintptr_t)addr & ~(sysconf(_SC_PAGE_SIZE) - 1));
 
     /* log the touched page as dirty */
-    nvaddrlist_insert(self->dirty, pgstart);
+    vaddrlist_insert(self->dirty, pgstart);
 
     /* specify the new page to swap back in to finish the pagefault */
     uffdio_copy.src = (uintptr_t)self->tmppage;
@@ -238,8 +238,8 @@ static int nvstore_initnvfs(const char *filename)
 {
     /* initialization of container bookkeeping data structures */
     list_init(&self->blocks);
-    self->dirty = nvaddrlist_new(NVADDRLIST_INIT_POWER);
-    self->table = nvaddrtable_new(NVADDRTABLE_INIT_POWER);
+    self->dirty = vaddrlist_new(NVADDRLIST_INIT_POWER);
+    self->table = vaddrtable_new(NVADDRTABLE_INIT_POWER);
 
     /* initialization of non-volatile file - DO NOT USE APPEND; instead, try to
      * first open under read mode and if the file doesn't exist, reopen under
@@ -421,8 +421,8 @@ int nvstore_shutdown()
 
     pthread_join(self->uffdworker, NULL);
 
-    nvaddrlist_delete(self->dirty);
-    nvaddrtable_delete(self->table);
+    vaddrlist_delete(self->dirty);
+    vaddrtable_delete(self->table);
 
     if (mc_munmap(self->tmppage, sysconf(_SC_PAGE_SIZE)) != 0)
         return E_MMAP;
@@ -456,11 +456,11 @@ void nvstore_checkpoint()
     for (i = 0; i < self->dirty->len; i++)
     {
         addr = self->dirty->addrs[i];
-        block = nvaddrtable_find(self->table, addr);
+        block = vaddrtable_find(self->table, addr);
 
         nvblock_dumpbypage(block, self->nvfs, addr);
     }
 
     nvmetadata_unlock(self->meta);
-    nvaddrlist_clear(self->dirty);
+    vaddrlist_clear(self->dirty);
 }

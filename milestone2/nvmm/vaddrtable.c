@@ -1,4 +1,4 @@
-#include "nvaddrtable.h"
+#include "vaddrtable.h"
 #include "memcheck.h"
 
 #include <unistd.h>
@@ -6,7 +6,7 @@
 
 #include <stdio.h>
 
-static struct nventry *__nvaddrtable_find(struct nvaddrtable *table, void *key)
+static struct ventry *__vaddrtable_find(struct vaddrtable *table, void *key)
 {
     size_t base, offset, hash, k;
     void *pgstart;
@@ -28,9 +28,9 @@ static struct nventry *__nvaddrtable_find(struct nvaddrtable *table, void *key)
     return NULL;
 }
 
-struct nvaddrtable *nvaddrtable_new(size_t power)
+struct vaddrtable *vaddrtable_new(size_t power)
 {
-    struct nvaddrtable *table = mc_malloc(sizeof(*table));
+    struct vaddrtable *table = mc_malloc(sizeof(*table));
 
     table->nelem = 0;
     table->cap = 1 << power;
@@ -40,15 +40,15 @@ struct nvaddrtable *nvaddrtable_new(size_t power)
     return table;
 }
 
-void nvaddrtable_delete(struct nvaddrtable *table)
+void vaddrtable_delete(struct vaddrtable *table)
 {
     mc_free(table->entries);
     mc_free(table);
 }
 
-void nvaddrtable_expand(struct nvaddrtable *table)
+void vaddrtable_expand(struct vaddrtable *table)
 {
-    struct nventry *oldentries;
+    struct ventry *oldentries;
     size_t oldcap, i;
 
     oldentries = table->entries;
@@ -59,14 +59,14 @@ void nvaddrtable_expand(struct nvaddrtable *table)
 
     for (i = 0; i < oldcap; i++)
         if (oldentries[i].value != NULL)
-            nvaddrtable_insert(table, oldentries[i].value);
+            vaddrtable_insert(table, oldentries[i].value);
 
     mc_free(oldentries);
 }
 
-void nvaddrtable_insert(struct nvaddrtable *table, struct nvblock *block)
+void vaddrtable_insert(struct vaddrtable *table, struct nvblock *block)
 {
-    struct nventry *entry;
+    struct ventry *entry;
     void *pgstart;
     size_t pgidx;
 
@@ -74,10 +74,10 @@ void nvaddrtable_insert(struct nvaddrtable *table, struct nvblock *block)
     {
         /* expand at 70% load - this method prevents FPU divisions */
         if (10 * table->nelem > 7 * table->cap)
-            nvaddrtable_expand(table);
+            vaddrtable_expand(table);
 
         pgstart = block->pgstart + (pgidx * sysconf(_SC_PAGE_SIZE));
-        entry = __nvaddrtable_find(table, pgstart);
+        entry = __vaddrtable_find(table, pgstart);
 
         entry->key = pgstart;
         entry->value = block;
@@ -85,10 +85,10 @@ void nvaddrtable_insert(struct nvaddrtable *table, struct nvblock *block)
     }
 }
 
-struct nvblock *nvaddrtable_find(struct nvaddrtable *table, void *addr)
+struct nvblock *vaddrtable_find(struct vaddrtable *table, void *addr)
 {
-    struct nventry *entry;
+    struct ventry *entry;
 
-    entry = __nvaddrtable_find(table, addr);
+    entry = __vaddrtable_find(table, addr);
     return entry->value;
 }

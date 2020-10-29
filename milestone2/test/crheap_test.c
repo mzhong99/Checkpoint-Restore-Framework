@@ -3,9 +3,9 @@
 #include "unittest.h"
 #include "memcheck.h"
 
-#include "nvaddrlist_test.h"
+#include "vaddrlist_test.h"
 #include "nvblock_test.h"
-#include "nvaddrtable_test.h"
+#include "vaddrtable_test.h"
 #include "nvstore_test.h"
 #include "memcheck_test.h"
 #include "crmalloc_test.h"
@@ -18,11 +18,11 @@
 void run_all_tests()
 {
     /**************************************************************************/
-    /** Tests: nvaddrlist --------------------------------------------------- */
+    /** Tests: vaddrlist ---------------------------------------------------- */
     /**************************************************************************/
-    run_test(test_nvaddrlist_init, "nvaddrlist", "Basic initialization");
-    run_test(test_nvaddrlist_basic_insertion, "nvaddrlist", "Small insertions");
-    run_test(test_nvaddrlist_large_insertion, "nvaddrlist", "Large insertions expand the list");
+    run_test(test_nvaddrlist_init, "vaddrlist", "Basic initialization");
+    run_test(test_nvaddrlist_basic_insertion, "vaddrlist", "Small insertions");
+    run_test(test_nvaddrlist_large_insertion, "vaddrlist", "Large insertions expand the list");
 
     /**************************************************************************/
     /** Tests: nvblock ------------------------------------------------------ */
@@ -31,12 +31,12 @@ void run_all_tests()
     run_test(test_nvblock_advanced, "nvblock", "Advanced usage with varying page demands");
 
     /**************************************************************************/
-    /** Tests: nvaddrtable -------------------------------------------------- */
+    /** Tests: vaddrtable --------------------------------------------------- */
     /**************************************************************************/
-    run_test(test_nvaddrtable_init, "nvaddrtable", "Basic initialization");
-    run_test(test_nvaddrtable_basic_insertion, "nvaddrtable", "Basic insertion for one block");
-    run_test(test_nvaddrtable_expansion, "nvaddrtable", "More insertions expand the table");
-    run_test(test_nvaddrtable_large_entries, "nvaddrtable", "Insertions of larger than one page");
+    run_test(test_vaddrtable_init, "vaddrtable", "Basic initialization");
+    run_test(test_vaddrtable_basic_insertion, "vaddrtable", "Basic insertion for one block");
+    run_test(test_vaddrtable_expansion, "vaddrtable", "More insertions expand the table");
+    run_test(test_vaddrtable_large_entries, "vaddrtable", "Insertions of larger than one page");
 
     /**************************************************************************/
     /** Tests: nvstore ------------------------------------------------------ */
@@ -60,6 +60,7 @@ void run_all_tests()
     /**************************************************************************/
     run_test(test_crmalloc_simple, "crmalloc", "Basic crmalloc() and crfree()");
     run_test(test_crmalloc_complex, "crmalloc", "Complex crmalloc() and crfree()");
+    run_test(test_crmalloc_recovery, "crmalloc", "Heap checkpointing and restoration");
     run_test(test_crmalloc_integration, "crmalloc", "Integration of crmalloc(), crfree(), and crrealloc()");
 
     mc_report();

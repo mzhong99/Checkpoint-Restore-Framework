@@ -1,5 +1,5 @@
-#include "nvaddrlist_test.h"
-#include "nvaddrlist.h"
+#include "vaddrlist_test.h"
+#include "vaddrlist.h"
 
 #include <stdlib.h>
 #include <stdint.h>
@@ -15,23 +15,23 @@
 
 const char *test_nvaddrlist_init()
 {
-    struct nvaddrlist *list;
+    struct vaddrlist *list;
 
-    list = nvaddrlist_new(1);
+    list = vaddrlist_new(1);
     if (list == NULL)
         return "Default construction failed.";
 
-    nvaddrlist_delete(list);
+    vaddrlist_delete(list);
     return NULL;
 }
 
 const char *test_nvaddrlist_basic_insertion()
 {
-    struct nvaddrlist *list;
+    struct vaddrlist *list;
     void *addrs[SMALL_LIST_SIZE];
     int i;
 
-    list = nvaddrlist_new(SMALL_LIST_POWER);
+    list = vaddrlist_new(SMALL_LIST_POWER);
 
     if (list->len != 0)
         return "Length of list should be zero at the very start.";
@@ -39,7 +39,7 @@ const char *test_nvaddrlist_basic_insertion()
     for (i = 0; i < SMALL_LIST_SIZE; i++)
     {
         addrs[i] = (void *)(uintptr_t)rand();
-        nvaddrlist_insert(list, addrs[i]);
+        vaddrlist_insert(list, addrs[i]);
     }
 
     if (list->len != SMALL_LIST_SIZE)
@@ -49,7 +49,7 @@ const char *test_nvaddrlist_basic_insertion()
         if (addrs[i] != list->addrs[i])
             return "After insertion (first round), list contents are wrong.";
 
-    nvaddrlist_clear(list);
+    vaddrlist_clear(list);
 
     if (list->len != 0)
         return "Length of list should be 0 after clear";
@@ -57,7 +57,7 @@ const char *test_nvaddrlist_basic_insertion()
     for (i = 0; i < SMALL_LIST_SIZE; i++)
     {
         addrs[i] = (void *)(uintptr_t)rand();
-        nvaddrlist_insert(list, addrs[i]);
+        vaddrlist_insert(list, addrs[i]);
     }
 
     if (list->len != SMALL_LIST_SIZE)
@@ -67,26 +67,26 @@ const char *test_nvaddrlist_basic_insertion()
         if (addrs[i] != list->addrs[i])
             return "After insertion (second round), list contents are wrong.";
 
-    nvaddrlist_delete(list);
+    vaddrlist_delete(list);
 
     return NULL;
 }
 
 const char *test_nvaddrlist_large_insertion()
 {
-    struct nvaddrlist *list;
+    struct vaddrlist *list;
     void *addrs[LARGE_LIST_SIZE];
     int i, ntrials;
 
-    list = nvaddrlist_new(1);
+    list = vaddrlist_new(1);
 
     for (ntrials = 0; ntrials < NUM_TRIALS; ntrials++)
     {
-        nvaddrlist_clear(list);
+        vaddrlist_clear(list);
         for (i = 0; i < LARGE_LIST_SIZE; i++)
         {
             addrs[i] = (void *)(uintptr_t)rand();
-            nvaddrlist_insert(list, addrs[i]);
+            vaddrlist_insert(list, addrs[i]);
         }
 
         for (i = 0; i < SMALL_LIST_SIZE; i++)
@@ -94,7 +94,7 @@ const char *test_nvaddrlist_large_insertion()
                 return "After insertion, list contents are wrong.";
     }
 
-    nvaddrlist_delete(list);
+    vaddrlist_delete(list);
 
     return NULL;
 }

@@ -7,7 +7,6 @@ struct vthreadtable *vthreadtable_new()
     struct vthreadtable *table;
 
     table = mc_malloc(sizeof(*table));
-    table->nelem = 0;
 
     for (i = 0; i < VTHREADTABLE_SIZE; i++)
         vtslist_init(&table->data[i]);

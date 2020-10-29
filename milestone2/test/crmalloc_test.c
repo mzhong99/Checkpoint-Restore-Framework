@@ -69,6 +69,81 @@ const char *test_crmalloc_complex()
     return NULL;
 }
 
+/**
+ * Tests by allocating NTRIAL arrays of integers, filling them with data, then
+ * shutting and restarting the heap system. The data needs to still be correct
+ * after a crheap_shutdown() followed by a crheap_init() reinitialization.
+ */
+const char *test_crmalloc_recovery()
+{
+    int i, trial, elapse, npages[NTRIALS], *data[NTRIALS];
+
+    /* ---------------------------------------------------------------------- */
+    /* Step 1: Preallocate data to populate heap                              */
+    /* ---------------------------------------------------------------------- */
+    crheap_init("test_crmalloc_recovery.heap");
+
+    for (trial = 0; trial < NTRIALS; trial++)
+    {
+        npages[trial] = (abs(rand()) % (trial + 1)) + 1;
+        data[trial] = crmalloc(
+            sizeof(int) * sysconf(_SC_PAGE_SIZE) * npages[trial]);
+
+        for (i = 0; i < sysconf(_SC_PAGE_SIZE) * npages[trial]; i++)
+            data[trial][i] = i;
+    }
+
+    crheap_shutdown();
+
+    /* ---------------------------------------------------------------------- */
+    /* Step 2: Continuously turn on, validate, free, and reallocate data      */
+    /* ---------------------------------------------------------------------- */
+    for (elapse = 0; elapse < NTRIALS; elapse++)
+    {
+        /* Before beginning one round (one elapse) of tests, first we call
+         * a reinitialization routine to rebuild heap integrity. */
+        crheap_init("test_crmalloc_recovery.heap");
+
+        /* First, for each block, validate that the data is correct */
+        for (trial = 0; trial < NTRIALS; trial++)
+            for (i = 0; i < sysconf(_SC_PAGE_SIZE) * npages[trial]; i++)
+                if (data[trial][i] != i)
+                    return "Data in a crmalloc() block after shutdown and "
+                           "reinitialization with same heap file is incorrect";
+                
+        /* Next, free each of the old data blocks */
+        for (trial = 0; trial < NTRIALS; trial++)
+            crfree(data[trial]);
+        
+        /* Finally, call crmalloc() again to attempt to allocate and repopulate.
+         * everything. We do this in a separate loop passthrough in order to
+         * attempt to stress-test the free-blocks list in the allocator. */
+        for (trial = 0; trial < NTRIALS; trial++)
+        {
+            npages[trial] = (abs(rand()) % (trial + 1)) + 1;
+            data[trial] = crmalloc(
+                sizeof(int) * sysconf(_SC_PAGE_SIZE) * npages[trial]);
+
+            for (i = 0; i < sysconf(_SC_PAGE_SIZE) * npages[trial]; i++)
+                data[trial][i] = i;
+        }
+
+        /* After one successful round of testing, we need to teardown the heap
+         * to show that shutdowns and restarts consistently work. */
+        crheap_shutdown();
+    }
+
+    /* ---------------------------------------------------------------------- */
+    /* Step 3: Free everything, one last time                                 */
+    /* ---------------------------------------------------------------------- */
+    crheap_init("test_crmalloc_recovery.heap");
+    for (trial = 0; trial < NTRIALS; trial++)
+        crfree(data[trial]);
+    crheap_shutdown();
+
+    /* Test is successful - notify caller as such! */
+    return NULL;
+}
 
 /******************************************************************************/
 /** Thorough unit testing with inner data structure validation -------------- */

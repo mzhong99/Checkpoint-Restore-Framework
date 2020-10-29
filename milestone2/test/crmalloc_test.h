@@ -3,6 +3,7 @@
 
 const char *test_crmalloc_simple();
 const char *test_crmalloc_complex();
+const char *test_crmalloc_recovery();
 const char *test_crmalloc_integration();
 
 #endif

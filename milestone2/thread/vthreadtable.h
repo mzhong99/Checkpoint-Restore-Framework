@@ -15,7 +15,6 @@
 struct vthreadtable
 {
     struct vtslist data[VTHREADTABLE_SIZE];
-    size_t nelem;
 };
 
 struct vthreadtable *vthreadtable_new();

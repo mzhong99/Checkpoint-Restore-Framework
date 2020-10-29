@@ -1,9 +1,9 @@
-#include "nvaddrlist.h"
+#include "vaddrlist.h"
 #include "memcheck.h"
 
-struct nvaddrlist *nvaddrlist_new(size_t power)
+struct vaddrlist *vaddrlist_new(size_t power)
 {
-    struct nvaddrlist *list;
+    struct vaddrlist *list;
 
     list = mc_malloc(sizeof(*list));
 
@@ -14,18 +14,18 @@ struct nvaddrlist *nvaddrlist_new(size_t power)
     return list;
 }
 
-void nvaddrlist_delete(struct nvaddrlist *list)
+void vaddrlist_delete(struct vaddrlist *list)
 {
     mc_free(list->addrs);
     mc_free(list);
 }
 
-void nvaddrlist_clear(struct nvaddrlist *list)
+void vaddrlist_clear(struct vaddrlist *list)
 {
     list->len = 0;
 }
 
-void nvaddrlist_insert(struct nvaddrlist *list, void *addr)
+void vaddrlist_insert(struct vaddrlist *list, void *addr)
 {
     if (list->len == list->cap)
     {
