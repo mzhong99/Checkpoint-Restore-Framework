@@ -128,8 +128,8 @@ const char *test_crmalloc_recovery()
                 data[trial][i] = i;
         }
 
-        /* After one successful round of testing, we need to teardown the heap
-         * to show that shutdowns and restarts consistently work. */
+        /* After one successful round of testing, we need to tear down the heap 
+         *to show that shutdowns and restarts maintain a consistent heap. */
         crheap_shutdown();
     }
 

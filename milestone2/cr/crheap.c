@@ -44,6 +44,10 @@ int crheap_shutdown()
 {
     int rc;
 
+    rc = crheap_checkpoint();
+    if (rc != 0)
+        return rc;
+
     rc = nvstore_shutdown();
     if (rc != 0)
         return rc;
@@ -66,5 +70,7 @@ int crprintf(const char * __restrict fmt, ...)
 
 int crheap_checkpoint()
 {
+    nvstore_checkpoint();
+
     return 0;
 }
