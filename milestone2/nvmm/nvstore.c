@@ -28,7 +28,7 @@
 #include "list.h"
 
 #include "vaddrlist.h"
-#include "nvblock.h"
+#include "vblock.h"
 #include "vaddrtable.h"
 
 /******************************************************************************/
@@ -72,17 +72,17 @@ static int nvstore_inituffdworker();
 static void nvstore_initmeta();
 
 /** retrieves and allocates the next block from file, with bookkeeping */
-static struct nvblock *nvstore_fetchnvfs();
+static struct vblock *nvstore_fetchnvfs();
 
 /** helper allocation function, allows address specification */
-static struct nvblock *__nvstore_allocpage(size_t size, void *addr);
+static struct vblock *__nvstore_allocpage(size_t size, void *addr);
 
 /******************************************************************************/
 /** Public-Facing API: nvmetadata ------------------------------------------- */
 /******************************************************************************/
 void nvmetadata_lock(struct nvmetadata *meta)
 {
-    struct nvblock *metablock;
+    struct vblock *metablock;
 
     meta->writelock = 0;
     metablock = vaddrtable_find(self->table, meta);
@@ -95,7 +95,7 @@ void nvmetadata_lock(struct nvmetadata *meta)
 
 void nvmetadata_unlock(struct nvmetadata *meta)
 {
-    struct nvblock *metablock;
+    struct vblock *metablock;
 
     meta->writelock = 1;
     metablock = vaddrtable_find(self->table, meta);
@@ -128,21 +128,21 @@ struct nvmetadata *nvmetadata_instance()
  *         pagedata and should automatically be checkpointed when we call the
  *         checkpointing function.
  */
-static struct nvblock *__nvstore_allocpage(size_t npages, void *addr)
+static struct vblock *__nvstore_allocpage(size_t npages, void *addr)
 {
     struct uffdio_register reg;
-    struct nvblock *block;
+    struct vblock *block;
     
     /* raw allocation and mmap() - offset should be at end of file */
-    block = nvblock_new(addr, npages, self->filesize);
+    block = vblock_new(addr, npages, self->filesize);
 
     /* if this allocation was brand-new (no backing address) then allocate space
      * in the file for the new block */
     if (addr == NULL)
-        nvblock_dumptofile(block, self->nvfs);
+        vblock_dumptofile(block, self->nvfs);
 
     /* increment the filesize by the amount of data we just wrote */
-    self->filesize += nvblock_nvfsize(block);
+    self->filesize += vblock_nvfsize(block);
 
     /* insert the block into our bookkeeping data structures */
     list_push_back(&self->blocks, &block->elem);
@@ -311,7 +311,7 @@ static int nvstore_inituffdworker()
  */
 static void nvstore_initmeta()
 {
-    struct nvblock *metablock;
+    struct vblock *metablock;
 
     /* first, set the filesize to 0 and attempt to fetch the metadata */
     self->filesize = 0;
@@ -348,9 +348,9 @@ static void nvstore_initmeta()
  * worked), and returning NULL if parsing failed. The internal filesize counter
  * is also updated.
  */
-static struct nvblock *nvstore_fetchnvfs()
+static struct vblock *nvstore_fetchnvfs()
 {
-    struct nvblock *block;
+    struct vblock *block;
     size_t nread, npages;
     void *tmp, *addr;
 
@@ -404,7 +404,7 @@ int nvstore_init(const char *filename)
 
 void *nvstore_allocpage(size_t npages)
 {
-    struct nvblock *block;
+    struct vblock *block;
 
     block = __nvstore_allocpage(npages, NULL);
     return block->pgstart;
@@ -413,7 +413,7 @@ void *nvstore_allocpage(size_t npages)
 int nvstore_shutdown()
 {
     struct list_elem *elem;
-    struct nvblock *block;
+    struct vblock *block;
     uint64_t postkill = 1;
 
     if (write(self->killfd, &postkill, sizeof(postkill)) != sizeof(postkill))
@@ -430,9 +430,9 @@ int nvstore_shutdown()
     while (!list_empty(&self->blocks))
     {
         elem = list_pop_back(&self->blocks);
-        block = list_entry(elem, struct nvblock, elem);
+        block = list_entry(elem, struct vblock, elem);
 
-        nvblock_delete(block);
+        vblock_delete(block);
     }
 
     if (fclose(self->nvfs) != 0)
@@ -449,7 +449,7 @@ void nvstore_checkpoint()
 {
     size_t i;
     void *addr;
-    struct nvblock *block;
+    struct vblock *block;
 
     nvmetadata_lock(self->meta);
 
@@ -458,7 +458,7 @@ void nvstore_checkpoint()
         addr = self->dirty->addrs[i];
         block = vaddrtable_find(self->table, addr);
 
-        nvblock_dumpbypage(block, self->nvfs, addr);
+        vblock_dumpbypage(block, self->nvfs, addr);
     }
 
     nvmetadata_unlock(self->meta);

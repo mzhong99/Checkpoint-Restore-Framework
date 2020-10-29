@@ -1,6 +1,6 @@
 #include "vaddrtable_test.h"
 #include "vaddrtable.h"
-#include "nvblock.h"
+#include "vblock.h"
 
 #include <unistd.h>
 #include <stddef.h>
@@ -27,10 +27,10 @@ const char *test_vaddrtable_init()
 const char *test_vaddrtable_basic_insertion()
 {
     struct vaddrtable *table;
-    struct nvblock *block, *find;
+    struct vblock *block, *find;
     size_t i;
 
-    block = nvblock_new(NULL, 1, 0);
+    block = vblock_new(NULL, 1, 0);
     table = vaddrtable_new(SMALL_POWER);
 
     vaddrtable_insert(table, block);
@@ -47,7 +47,7 @@ const char *test_vaddrtable_basic_insertion()
     }
 
     vaddrtable_delete(table);
-    nvblock_delete(block);
+    vblock_delete(block);
 
     return NULL;
 }
@@ -55,14 +55,14 @@ const char *test_vaddrtable_basic_insertion()
 const char *test_vaddrtable_expansion()
 {
     struct vaddrtable *table;
-    struct nvblock *blocks[LARGE_SIZE], *find;
+    struct vblock *blocks[LARGE_SIZE], *find;
     size_t i, j;
 
     table = vaddrtable_new(SMALL_POWER);
 
     for (i = 0; i < LARGE_SIZE; i++)
     {
-        blocks[i] = nvblock_new(NULL, 1, 0);
+        blocks[i] = vblock_new(NULL, 1, 0);
 
         if (blocks[i] == NULL)
             return "Failure occurred in basic block allocation.";
@@ -82,7 +82,7 @@ const char *test_vaddrtable_expansion()
 
     vaddrtable_delete(table);
     for (i = 0; i < LARGE_SIZE; i++)
-        nvblock_delete(blocks[i]);
+        vblock_delete(blocks[i]);
 
     return NULL;
 }
@@ -90,14 +90,14 @@ const char *test_vaddrtable_expansion()
 const char *test_vaddrtable_large_entries()
 {
     struct vaddrtable *table;
-    struct nvblock *blocks[SMALL_SIZE], *find;
+    struct vblock *blocks[SMALL_SIZE], *find;
     size_t i, j;
 
     table = vaddrtable_new(SMALL_POWER);
 
     for (i = 0; i < SMALL_SIZE; i++)
     {
-        blocks[i] = nvblock_new(NULL, i + 1, 0);
+        blocks[i] = vblock_new(NULL, i + 1, 0);
 
         if (blocks[i] == NULL)
             return "Failure occurred in basic block allocation.";
@@ -117,7 +117,7 @@ const char *test_vaddrtable_large_entries()
 
     vaddrtable_delete(table);
     for (i = 0; i < SMALL_SIZE; i++)
-        nvblock_delete(blocks[i]);
+        vblock_delete(blocks[i]);
 
     return NULL;
 }

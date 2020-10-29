@@ -13,7 +13,7 @@
 
 #define NUM_TRIALS          5
 
-const char *test_nvaddrlist_init()
+const char *test_vaddrlist_init()
 {
     struct vaddrlist *list;
 
@@ -25,7 +25,7 @@ const char *test_nvaddrlist_init()
     return NULL;
 }
 
-const char *test_nvaddrlist_basic_insertion()
+const char *test_vaddrlist_basic_insertion()
 {
     struct vaddrlist *list;
     void *addrs[SMALL_LIST_SIZE];
@@ -72,7 +72,7 @@ const char *test_nvaddrlist_basic_insertion()
     return NULL;
 }
 
-const char *test_nvaddrlist_large_insertion()
+const char *test_vaddrlist_large_insertion()
 {
     struct vaddrlist *list;
     void *addrs[LARGE_LIST_SIZE];

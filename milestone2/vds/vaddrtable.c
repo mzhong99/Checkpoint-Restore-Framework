@@ -64,7 +64,7 @@ void vaddrtable_expand(struct vaddrtable *table)
     mc_free(oldentries);
 }
 
-void vaddrtable_insert(struct vaddrtable *table, struct nvblock *block)
+void vaddrtable_insert(struct vaddrtable *table, struct vblock *block)
 {
     struct ventry *entry;
     void *pgstart;
@@ -85,7 +85,7 @@ void vaddrtable_insert(struct vaddrtable *table, struct nvblock *block)
     }
 }
 
-struct nvblock *vaddrtable_find(struct vaddrtable *table, void *addr)
+struct vblock *vaddrtable_find(struct vaddrtable *table, void *addr)
 {
     struct ventry *entry;
 

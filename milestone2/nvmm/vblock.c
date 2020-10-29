@@ -1,4 +1,4 @@
-#include "nvblock.h"
+#include "vblock.h"
 #include "memcheck.h"
 
 #include <unistd.h>
@@ -9,9 +9,9 @@
 #include <stddef.h>
 #include <stdio.h>
 
-struct nvblock *nvblock_new(void *pgaddr, size_t npages, off_t offset)
+struct vblock *vblock_new(void *pgaddr, size_t npages, off_t offset)
 {
-    struct nvblock *block = NULL;
+    struct vblock *block = NULL;
 
     assert(npages > 0);
     block = mc_malloc(sizeof(*block));
@@ -31,20 +31,20 @@ struct nvblock *nvblock_new(void *pgaddr, size_t npages, off_t offset)
     return block;
 }
 
-void nvblock_delete(struct nvblock *block)
+void vblock_delete(struct vblock *block)
 {
     mc_munmap(block->pgstart, block->npages * sysconf(_SC_PAGE_SIZE));
     mc_free(block);
 }
 
-off_t nvblock_nvfsize(struct nvblock *block)
+off_t vblock_nvfsize(struct vblock *block)
 {
     return sizeof(block->pgstart) 
          + sizeof(block->npages) 
          + (sysconf(_SC_PAGE_SIZE) * block->npages);
 }
 
-off_t nvblock_pgoffset(struct nvblock *block, void *addr)
+off_t vblock_pgoffset(struct vblock *block, void *addr)
 {
     uintptr_t addrul, pgstartul;
     off_t frompgstart, trueoffset;
@@ -58,7 +58,7 @@ off_t nvblock_pgoffset(struct nvblock *block, void *addr)
     return trueoffset;
 }
 
-void nvblock_dumptofile(struct nvblock *block, FILE *file)
+void vblock_dumptofile(struct vblock *block, FILE *file)
 {
     size_t nwrite;
 
@@ -79,14 +79,14 @@ void nvblock_dumptofile(struct nvblock *block, FILE *file)
     assert(nwrite == block->npages * sysconf(_SC_PAGE_SIZE));
 }
 
-void nvblock_dumpbypage(struct nvblock *block, FILE *file, void *addr)
+void vblock_dumpbypage(struct vblock *block, FILE *file, void *addr)
 {
     off_t pgoffset, nwrite;
     void *pgstart;
 
     pgstart = (void *)((uintptr_t)addr & ~(sysconf(_SC_PAGE_SIZE) - 1));
 
-    pgoffset = nvblock_pgoffset(block, pgstart);
+    pgoffset = vblock_pgoffset(block, pgstart);
     fseek(file, pgoffset, SEEK_SET);
     nwrite = fwrite(pgstart, 1, sysconf(_SC_PAGE_SIZE), file);
     assert(nwrite == sysconf(_SC_PAGE_SIZE));

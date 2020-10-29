@@ -4,7 +4,7 @@
 #include "memcheck.h"
 
 #include "vaddrlist_test.h"
-#include "nvblock_test.h"
+#include "vblock_test.h"
 #include "vaddrtable_test.h"
 #include "nvstore_test.h"
 #include "memcheck_test.h"
@@ -20,15 +20,15 @@ void run_all_tests()
     /**************************************************************************/
     /** Tests: vaddrlist ---------------------------------------------------- */
     /**************************************************************************/
-    run_test(test_nvaddrlist_init, "vaddrlist", "Basic initialization");
-    run_test(test_nvaddrlist_basic_insertion, "vaddrlist", "Small insertions");
-    run_test(test_nvaddrlist_large_insertion, "vaddrlist", "Large insertions expand the list");
+    run_test(test_vaddrlist_init, "vaddrlist", "Basic initialization");
+    run_test(test_vaddrlist_basic_insertion, "vaddrlist", "Small insertions");
+    run_test(test_vaddrlist_large_insertion, "vaddrlist", "Large insertions expand the list");
 
     /**************************************************************************/
-    /** Tests: nvblock ------------------------------------------------------ */
+    /** Tests: vblock ------------------------------------------------------ */
     /**************************************************************************/
-    run_test(test_nvblock_basic, "nvblock", "Basic initialization with both prevaddr and NULL");
-    run_test(test_nvblock_advanced, "nvblock", "Advanced usage with varying page demands");
+    run_test(test_vblock_basic, "vblock", "Basic initialization with both prevaddr and NULL");
+    run_test(test_vblock_advanced, "vblock", "Advanced usage with varying page demands");
 
     /**************************************************************************/
     /** Tests: vaddrtable --------------------------------------------------- */
