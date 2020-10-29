@@ -58,10 +58,13 @@ $(EXE): $(OBJ_CFILES)
 coverage: run 
 	@echo "[GEN_COVERAGE]"
 	@lcov --quiet --capture --directory . --output-file $(COVERAGE_INFO)
+	@echo "[GEN_REPORT]"
 	@genhtml --quiet $(COVERAGE_INFO) --output-directory $(COVERAGE_DIR)
+	@echo "[OPEN_REPORT]"
 	@xdg-open $(COVERAGE_DIR)/index.html
 
 ctags:
+	@echo "GEN"
 	ctags -R .
 
 clean:
@@ -73,7 +76,7 @@ clean:
 	
 	@echo "[DEL] GCOV files (*.gcov, *.gcda, *.gcno)"
 	@$(DEL) $(GCOV_CFILES) $(GCDA_CFILES) $(GCNO_CFILES)
-
+	
 	@# Be careful with this line if you edit it - it uses rm -rf to remove folder
 	@echo "[DEL] Coverage info"
 	@$(DEL) -r $(COVERAGE_DIR) $(COVERAGE_INFO)

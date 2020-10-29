@@ -60,6 +60,7 @@ void run_all_tests()
     /**************************************************************************/
     run_test(test_crmalloc_simple, "crmalloc", "Basic crmalloc() and crfree()");
     run_test(test_crmalloc_complex, "crmalloc", "Complex crmalloc() and crfree()");
+    run_test(test_crmalloc_integration, "crmalloc", "Integration of crmalloc(), crfree(), and crrealloc()");
 
     mc_report();
 }

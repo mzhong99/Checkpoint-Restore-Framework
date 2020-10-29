@@ -35,7 +35,6 @@
 /** Macros, Definitions, and Static Variables: nvstore ---------------------- */
 /******************************************************************************/
 
-
 /* non-volatile storage manager struct */
 struct nvstore
 {

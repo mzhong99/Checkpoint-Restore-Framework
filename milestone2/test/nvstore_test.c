@@ -113,7 +113,7 @@ const char *test_nvstore_checkpoint_simple()
 
     nvstore_checkpoint();
 
-    nvstore_shutdown();
+    rc = nvstore_shutdown();
     if (rc != 0)
         return "First shutdown failed.";
 

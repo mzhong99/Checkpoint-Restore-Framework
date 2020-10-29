@@ -28,8 +28,8 @@
 #include <stdarg.h>
 #include <stdint.h>
 
-#define container_of(PTR, STRUCT_TYPE, MEMBER_NAME) \
-    (STRUCT_TYPE *)((uint8_t *)(PTR) - offsetof(STRUCT_TYPE, MEMBER_NAME))
+#include "macros.h"
+#include "crmalloc.h"
 
 /** 
  * Used to initialize the non-volatile heap system. This initializes any 
@@ -60,33 +60,6 @@ int crheap_shutdown();
 
 /** The classic printf() function, without the embedded dynamic allocation. */
 int crprintf(const char * __restrict fmt, ...);
-
-/**
- * Allocates memory on the non-volatile heap. Works just like the original 
- * malloc() does from GLIBC.
- *
- * @param size:     Number of bytes to allocate from the heap
- * @return:         A pointer to the first byte of the payload
- */
-void *crmalloc(size_t size);
-
-/**
- * Frees memory which was previously allocated. Works just like the original 
- * free() does from GLIBC.
- *
- * @param ptr:      A pointer to the payload to free
- */
-void crfree(void *ptr);
-
-/**
- * Reallocates memory which was previously allocated. Works just like the 
- * original realloc() does from GLIBC.
- *
- * @param ptr:      A pointer to the payload to reallocate
- * @param size:     The new size of the payload to create
- * @return:         A pointer to the new payload
- */
-void *crrealloc(void *ptr, size_t size);
 
 /**
  * Checkpoints the current heap into a file.
