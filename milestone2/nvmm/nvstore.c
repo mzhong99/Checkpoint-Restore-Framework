@@ -27,8 +27,8 @@
 
 #include "vtslist.h"
 
-#include "vaddrlist.h"
 #include "vblock.h"
+#include "vtsdirtyset.h"
 #include "vtsaddrtable.h"
 #include "crmalloc.h"
 #include "macros.h"
@@ -54,8 +54,8 @@ struct nvstore
     /* checkpoint worker and associated data structures                       */
     /* ---------------------------------------------------------------------- */
     pthread_t crworker;         /* thread for handling requests to checkpoint */
-    struct vaddrlist *dirty;    /* list of dirty pages to checkpoint          */
-    struct vtsaddrtable *table;   /* used to relocate block from raw page addr  */
+    struct vtsdirtyset *dirty;  /* list of dirty pages to checkpoint          */
+    struct vtsaddrtable *table; /* used to relocate block from raw page addr  */
 
     /* non-volatile filesystem used to store data on checkpoint               */
     /* ---------------------------------------------------------------------- */
@@ -193,7 +193,7 @@ static void nvstore_handle_pagefault()
     pgstart = (void *)((uintptr_t)addr & ~(sysconf(_SC_PAGE_SIZE) - 1));
 
     /* log the touched page as dirty */
-    vaddrlist_insert(self->dirty, pgstart);
+    vtsdirtyset_insert(self->dirty, pgstart);
 
     /* specify the new page to swap back in to finish the pagefault */
     uffdio_copy.src = (uintptr_t)self->tmppage;
@@ -245,7 +245,7 @@ static int nvstore_initnvfs(const char *filename)
 {
     /* initialization of container bookkeeping data structures */
     vtslist_init(&self->blocks);
-    self->dirty = vaddrlist_new(NVADDRLIST_INIT_POWER);
+    self->dirty = vtsdirtyset_new();
     self->table = vtsaddrtable_new(NVADDRTABLE_INIT_POWER);
 
     /* initialization of non-volatile file - DO NOT USE APPEND; instead, try to
@@ -429,7 +429,7 @@ int nvstore_shutdown()
 
     pthread_join(self->uffdworker, NULL);
 
-    vaddrlist_delete(self->dirty);
+    vtsdirtyset_delete(self->dirty);
     vtsaddrtable_delete(self->table);
 
     if (mc_munmap(self->tmppage, sysconf(_SC_PAGE_SIZE)) != 0)
@@ -459,14 +459,11 @@ void nvstore_checkpoint()
 
     nvmetadata_lock(self->meta);
 
-    for (i = 0; i < self->dirty->len; i++)
+    while ((addr = vtsdirtyset_remove_any(self->dirty)) != NULL)
     {
-        addr = self->dirty->addrs[i];
         block = vtsaddrtable_find(self->table, addr);
-
         vblock_dumpbypage(block, self->nvfs, addr);
     }
 
     nvmetadata_unlock(self->meta);
-    vaddrlist_clear(self->dirty);
 }

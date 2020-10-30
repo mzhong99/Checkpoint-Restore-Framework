@@ -30,7 +30,7 @@ struct vtsaddrtable
     size_t nelem;
     size_t cap;
 
-    pthread_mutex_t lock;
+    pthread_rwlock_t lock;
 };
 
 /* construction and deletion functions for hash table */

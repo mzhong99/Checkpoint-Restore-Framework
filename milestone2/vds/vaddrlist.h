@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-#define NVADDRLIST_INIT_POWER    12
+#define NVADDRLIST_INIT_POWER    4
 
 /* simple arraylist used for storing a list of pages to checkpoint */
 struct vaddrlist

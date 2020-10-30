@@ -99,14 +99,14 @@ struct vtsaddrtable *vtsaddrtable_new(size_t power)
     table->cap = 1 << power;
 
     table->entries = mc_calloc(table->cap, sizeof(*table->entries));
-    pthread_mutex_init(&table->lock, NULL);
+    pthread_rwlock_init(&table->lock, NULL);
 
     return table;
 }
 
 void vtsaddrtable_delete(struct vtsaddrtable *table)
 {
-    pthread_mutex_destroy(&table->lock);
+    pthread_rwlock_destroy(&table->lock);
 
     mc_free(table->entries);
     mc_free(table);
@@ -114,18 +114,18 @@ void vtsaddrtable_delete(struct vtsaddrtable *table)
 
 void vtsaddrtable_insert(struct vtsaddrtable *table, struct vblock *block)
 {
-    pthread_mutex_lock(&table->lock);
+    pthread_rwlock_wrlock(&table->lock);
     __vtsaddrtable_insert(table, block);
-    pthread_mutex_unlock(&table->lock);
+    pthread_rwlock_unlock(&table->lock);
 }
 
 struct vblock *vtsaddrtable_find(struct vtsaddrtable *table, void *addr)
 {
     struct ventry *entry;
 
-    pthread_mutex_lock(&table->lock);
+    pthread_rwlock_rdlock(&table->lock);
     entry = __vtsaddrtable_find(table, addr);
-    pthread_mutex_unlock(&table->lock);
+    pthread_rwlock_unlock(&table->lock);
 
     return entry->value;
 }

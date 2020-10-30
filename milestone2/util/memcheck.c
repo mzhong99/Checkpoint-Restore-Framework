@@ -1,5 +1,6 @@
 #include "unittest.h"
 #include "memcheck.h"
+#include "ptr_hash.h"
 
 #include <stdlib.h>
 #include <stdint.h>
@@ -39,9 +40,6 @@ static struct mc_table s_table =
 { .nelem = 0, .btotal = 0, .nalloc = 0, .nfree = 0, .data = {0} };
 static struct mc_table *self = &s_table;
 
-/* hash function */
-static uint64_t ptr_hash(void *ptr);
-
 /* node management functions */
 static struct mc_node *mc_node_new(enum mc_type type, void *addr, 
                                    size_t nmenb, size_t size);
@@ -55,17 +53,6 @@ static void mc_table_insert(struct mc_node *node);
 /******************************************************************************/
 /** Private Implementation -------------------------------------------------- */
 /******************************************************************************/
-static uint64_t ptr_hash(void *ptr) 
-{
-    uint64_t x = (uint64_t)ptr;
-
-    x = (x ^ (x >> 30)) * (uint64_t)(0xbf58476d1ce4e5b9);
-    x = (x ^ (x >> 27)) * (uint64_t)(0x94d049bb133111eb);
-    x = x ^ (x >> 31);
-
-    return x % TABLE_SIZE;
-}
-
 static struct mc_node *mc_node_new(enum mc_type type, void *addr, 
                                    size_t nmemb, size_t size)
 {
@@ -91,7 +78,7 @@ static struct mc_node **mc_table_find(void *addr)
     uint64_t hash;
     struct mc_node **it_p;
 
-    hash = ptr_hash(addr);
+    hash = ptr_hash(addr) % TABLE_SIZE;
 
     for (it_p = &self->data[hash]; *it_p != NULL; it_p = &((*it_p)->next))
         if ((*it_p)->addr == addr)
@@ -132,7 +119,7 @@ static void mc_table_insert(struct mc_node *node)
     if (*find != NULL)
         mc_table_del((*find)->addr);
 
-    hash = ptr_hash(node->addr);
+    hash = ptr_hash(node->addr) % TABLE_SIZE;
     node->next = self->data[hash];
     self->data[hash] = node;
 

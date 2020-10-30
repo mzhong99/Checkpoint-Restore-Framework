@@ -9,7 +9,7 @@
 
 /* Hash table - array of thread-safe list. Supports simultaneous insertions 
  * and removals, but each removal MUST be conducted by just ONE thread. */
-struct vtslist table[VTHREADTABLE_SIZE];
+static struct vtslist table[VTHREADTABLE_SIZE];
 
 /******************************************************************************/
 /** Public-Facing API ------------------------------------------------------- */
