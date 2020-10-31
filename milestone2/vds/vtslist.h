@@ -27,6 +27,7 @@ struct vtslist
 
 /** Initialization and cleanup of list (cleans up locks) */
 void vtslist_init(struct vtslist *vtslist);
+void vtslist_init_locks_only(struct vtslist *vtslist);
 void vtslist_cleanup(struct vtslist *vtslist);
 
 /** Insertion operations */

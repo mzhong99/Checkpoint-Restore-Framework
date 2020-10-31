@@ -1,4 +1,4 @@
-#include "vthreadtable.h"
+#include "vtsthreadtable.h"
 #include "macros.h"
 #include "vtslist.h"
 
@@ -14,21 +14,21 @@ static struct vtslist table[VTHREADTABLE_SIZE];
 /******************************************************************************/
 /** Public-Facing API ------------------------------------------------------- */
 /******************************************************************************/
-void vthreadtable_init()
+void vtsthreadtable_init()
 {
     size_t i;
     for (i = 0; i < VTHREADTABLE_SIZE; i++)
         vtslist_init(&table[i]);
 }
 
-void vthreadtable_cleanup()
+void vtsthreadtable_cleanup()
 {
     size_t i;
     for (i = 0; i < VTHREADTABLE_SIZE; i++)
         vtslist_cleanup(&table[i]);
 }
 
-void vthreadtable_insert(struct crthread *handle)
+void vtsthreadtable_insert(struct crthread *handle)
 {
     struct vtslist *vtslist;
     size_t hash;
@@ -38,7 +38,7 @@ void vthreadtable_insert(struct crthread *handle)
     vtslist_push_back(vtslist, &handle->vtselem);
 }
 
-struct crthread *vthreadtable_find(pthread_t id)
+struct crthread *vtsthreadtable_find(pthread_t id)
 {
     struct vtslist *vtslist;
 
@@ -73,11 +73,11 @@ struct crthread *vthreadtable_find(pthread_t id)
     return fetch;
 }
 
-struct crthread *vthreadtable_remove(pthread_t id)
+struct crthread *vtsthreadtable_remove(pthread_t id)
 {
     struct crthread *fetch;
 
-    fetch = vthreadtable_find(id);
+    fetch = vtsthreadtable_find(id);
     if (fetch != NULL)
         vtslist_remove(&fetch->vtselem);
 

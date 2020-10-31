@@ -1,22 +1,112 @@
 #include "crthread.h"
 #include "crheap.h"
 #include "nvstore.h"
+#include "vtsthreadtable.h"
+
+#include <assert.h>
 
 /******************************************************************************/
 /** Macros, Definitions, and Static Variables ------------------------------- */
 /******************************************************************************/
 
-/* creation and deletion of non-volatile thread handles */
-static struct crthread *crthread_new(void *(*taskfunc) (void *), void *arg);
-static void crthread_delete(struct crthread *thread);
-
-/* used as a wrapper for restoration hook on subsequent runs */
+/** Used as a wrapper for restoration hook on subsequent runs */
 static void *crthread_taskfunc(void *thread_vp);
+
+/** Used to restore a stale thread upon program restart */
+static void crthread_restore(struct crthread *thread);
 
 /******************************************************************************/
 /** Private Implementation -------------------------------------------------- */
 /******************************************************************************/
-static struct crthread *crthread_new(void *(*taskfunc) (void *), void *arg)
+
+static void crthread_restore(struct crthread *thread)
+{
+    pthread_attr_t attrs;
+
+    pthread_attr_init(&attrs);
+    pthread_attr_setstack(&attrs, thread->recoverystack, DEFAULT_STACKSIZE);
+
+    pthread_create(&thread->ptid, &attrs, thread->taskfunc, thread);
+    pthread_attr_destroy(&attrs);
+}
+
+static void *crthread_taskfunc(void *crthread_vp)
+{
+    struct crthread *thread = crthread_vp;
+    void *retval;
+
+    /* Initialization of Transient Fields                                     */
+    /* ---------------------------------------------------------------------- */
+
+    /* Add thread to volatile global thread table. */
+    vtsthreadtable_insert(thread);
+
+    /* Create thread checkpoint object, specifying what memory to checkpoint. */
+    thread->checkpoint = checkpoint_new();
+    checkpoint_add(thread->checkpoint, thread, sizeof(*thread));
+    checkpoint_add(thread->checkpoint, thread->stack, thread->stacksize);
+    
+    if (thread->firstrun)
+    {
+        /* If this is the thread's first execution, mark a starting checkpoint
+         * and then run the task function inside. */
+        thread->firstrun = false;
+        crthread_checkpoint();
+        retval = thread->taskfunc(thread->arg);
+    }
+    else
+    {
+        /* Otherwise, allow execution privileges on the proper stack segment
+         * and then jump directly to continue exeuciton. */
+
+        /* TODO: use mprotect() to handle execution permissions. */
+        longjmp(thread->env, 1);
+    }
+
+
+    /* Destruction of Transient Fields                                        */
+    /* ---------------------------------------------------------------------- */
+
+    /* Remove the thread from the volatile global thread table. */
+    vtsthreadtable_remove(thread->ptid);
+
+    /* Destroy thread checkpoint object. */
+    checkpoint_delete(thread->checkpoint);
+
+    return retval;
+}
+
+/******************************************************************************/
+/** Public-Facing API ------------------------------------------------------- */
+/******************************************************************************/
+
+/** We restore each cached thread if the thread crashed during execution.     */
+void crthread_init_system()
+{
+    struct nvmetadata *meta;
+    struct list_elem *elem;
+    struct crthread *thread;
+
+    meta = nvmetadata_instance();
+
+    vtsthreadtable_init();
+
+    pthread_mutex_lock(&meta->threadlock);
+
+    elem = list_begin(&meta->threadlist);
+    while (elem != list_end(&meta->threadlist))
+    {
+        thread = container_of(elem, struct crthread, elem);
+        if (thread->inprogress)
+            crthread_restore(thread);
+
+        elem = list_next(elem);
+    }
+
+    pthread_mutex_unlock(&meta->threadlock);
+}
+
+struct crthread *crthread_new(void *(*taskfunc) (void *), size_t stacksize)
 {
     struct crthread *crthread;
     struct nvmetadata *meta;
@@ -24,11 +114,14 @@ static struct crthread *crthread_new(void *(*taskfunc) (void *), void *arg)
     meta = nvmetadata_instance();
 
     crthread = crmalloc(sizeof(*crthread));
+
     crthread->stacksize = DEFAULT_STACKSIZE;
+    if (stacksize > DEFAULT_STACKSIZE)
+        crthread->stacksize = stacksize & ~(sysconf(_SC_PAGE_SIZE) - 1);
+
     crthread->stack = crmalloc(crthread->stacksize);
 
     crthread->taskfunc = taskfunc;
-    crthread->arg = arg;
 
     crthread->firstrun = true;
     crthread->ptid = -1;
@@ -37,10 +130,12 @@ static struct crthread *crthread_new(void *(*taskfunc) (void *), void *arg)
     list_push_back(&meta->threadlist, &crthread->elem);
     pthread_mutex_unlock(&meta->threadlock);
 
+    nvmetadata_checkpoint(meta);
+
     return crthread;
 }
 
-static void crthread_delete(struct crthread *crthread)
+void crthread_delete(struct crthread *crthread)
 {
     struct nvmetadata *meta;
 
@@ -54,76 +149,58 @@ static void crthread_delete(struct crthread *crthread)
     crfree(crthread);
 }
 
-static void *crthread_taskfunc(void *crthread_vp)
+void crthread_fork(struct crthread *thread, void *arg)
 {
-    struct crthread *crthread = crthread_vp;
+    pthread_attr_t attrs;
+
+    thread->arg = arg;
+
+    pthread_attr_init(&attrs);
+    pthread_attr_setstack(&attrs, thread->stack, thread->stacksize);
+
+    pthread_create(&thread->ptid, &attrs, crthread_taskfunc, thread);
+    pthread_attr_destroy(&attrs);
+}
+
+void *crthread_join(struct crthread *thread)
+{
     void *retval;
 
-    if (crthread->firstrun)
-    {
-        crthread->firstrun = false;
-        retval = crthread->taskfunc(crthread->arg);
-    }
-    else
-        longjmp(crthread->checkpoint, 1);
+    pthread_join(thread->ptid, &retval);
+    thread->inprogress = false;
 
     return retval;
 }
 
-/******************************************************************************/
-/** Public-Facing API ------------------------------------------------------- */
-/******************************************************************************/
-int crpthread_create(crpthread_t *crptid, void *(*routine) (void *), void *arg)
+/**
+ * The inner process used to checkpoint a thread follows the below algorithm:
+ * 
+ *  1.) Retrieve the thread handle based on the current pthread_t handle from 
+ *      the global thread table.
+ * 
+ *  2.) Perform a [setjmp()]. The return code of this function will determine 
+ *      whether the function is starting or if it is restarting. 
+ * 
+ *      A return code of 0 implies that the jump buffer was CREATED, meaning 
+ *      that we're in the process of creating a checkpoint.
+ * 
+ *      A return code of 1 implies that the thread jumped to this location. This
+ *      implies that we are attempting to RESTORE the program execution context.
+ * 
+ *  3.) If a checkpoint is requested, we commit the calling thread's current
+ *      stack and other miscellaneous thread members.
+ */
+void crthread_checkpoint()
 {
-    struct crthread *crthread;
-    pthread_attr_t attrs;
+    struct crthread *thread = NULL;
+    pthread_t ptid;
     int rc;
 
-    void *stack;
-    size_t stacksize;
+    ptid = pthread_self();
+    thread = vtsthreadtable_find(ptid);
+    assert(thread != NULL);
 
-    /* create a new thread handle with appropriate arguments */
-    crthread = crthread_new(routine, arg);
-    *crptid = &crthread->ptid;
-
-    /* init pthread attrs for stack setup */
-    rc = pthread_attr_init(&attrs);
-    if (rc != 0)
-        goto fail;
-
-    /* sets stack to either default (first run) OR recovery stack (restore) */
-    stack = crthread->stack;
-    stacksize = crthread->stacksize;
-
-    if (!crthread->firstrun)
-    {
-        stack = crthread->recoverystack;
-        stacksize = DEFAULT_STACKSIZE;
-    }
-
-    rc = pthread_attr_setstack(&attrs, stack, stacksize);
-    if (rc != 0)
-        goto fail;
-
-    return pthread_create(&crthread->ptid, &attrs, crthread_taskfunc, crthread);
-
-fail:
-    crthread_delete(crthread);
-    return rc;
+    rc = setjmp(thread->env);
+    if (rc == 0)
+        checkpoint_commit(thread->checkpoint);
 }
-
-int crpthread_join(crpthread_t thread, void **retval)
-{
-    struct crthread *crthread;
-    int rc;
-
-    crthread = container_of(thread, struct crthread, ptid);
-    rc = pthread_join(crthread->ptid, retval);
-
-    if (rc != 0)
-        return rc;
-
-    crthread_delete(crthread);
-    return rc;
-}
-

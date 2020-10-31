@@ -5,6 +5,11 @@
 void vtslist_init(struct vtslist *vtslist)
 {
     list_init(&vtslist->list);
+    vtslist_init_locks_only(vtslist);
+}
+
+void vtslist_init_locks_only(struct vtslist *vtslist)
+{
     pthread_mutex_init(&vtslist->lock, NULL);
     pthread_cond_init(&vtslist->haselems, NULL);
 }

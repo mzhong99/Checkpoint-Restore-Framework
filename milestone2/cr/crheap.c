@@ -16,7 +16,7 @@
 #include <stdio.h>
 
 #include "nvstore.h"
-#include "vthreadtable.h"
+#include "vtsthreadtable.h"
 
 /******************************************************************************/
 /** Macros, Definitions, and Static Variables ------------------------------- */
@@ -38,8 +38,6 @@ int crheap_init(const char *filename)
     if (rc != 0)
         return rc;
 
-    vthreadtable_init();
-
     return 0;
 }
 
@@ -55,7 +53,6 @@ int crheap_shutdown()
     if (rc != 0)
         return rc;
 
-    vthreadtable_cleanup();
 
     return 0;
 }

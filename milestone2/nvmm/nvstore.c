@@ -25,12 +25,14 @@
 #include <assert.h>
 #include <alloca.h>
 
-#include "vtslist.h"
-
 #include "vblock.h"
+#include "checkpoint.h"
+
+#include "vtslist.h"
 #include "vtsdirtyset.h"
 #include "vtsaddrtable.h"
 #include "crmalloc.h"
+
 #include "macros.h"
 
 /******************************************************************************/
@@ -43,6 +45,8 @@ struct nvstore
     /* bookkeeping data strctures                                             */
     /* ---------------------------------------------------------------------- */
     struct vtslist blocks;      /* master container of allocated pages        */
+    struct vtsdirtyset *dirty;  /* list of dirty pages to checkpoint          */
+    struct vtsaddrtable *table; /* used to relocate block from raw page addr  */
 
     /* userfaultfd handler and file descriptors                               */
     /* ---------------------------------------------------------------------- */
@@ -54,8 +58,7 @@ struct nvstore
     /* checkpoint worker and associated data structures                       */
     /* ---------------------------------------------------------------------- */
     pthread_t crworker;         /* thread for handling requests to checkpoint */
-    struct vtsdirtyset *dirty;  /* list of dirty pages to checkpoint          */
-    struct vtsaddrtable *table; /* used to relocate block from raw page addr  */
+    struct vtslist crinput;     /* input message queue for async. checkpoints */
 
     /* non-volatile filesystem used to store data on checkpoint               */
     /* ---------------------------------------------------------------------- */
@@ -69,7 +72,8 @@ static struct nvstore s_nvstore;
 static struct nvstore *const self = &s_nvstore;
 
 /** task function - do not call directly, run on separate thread */
-static void *nvstore_tf_uffdworker(__attribute__((unused))void *args);
+static void *nvstore_tf_uffdworker(__attribute__((unused))void *arg);
+static void *nvstore_tf_crworker(__attribute__((unused))void *arg);
 
 /** helper init functions */
 static int nvstore_initnvfs(const char *filename);
@@ -116,6 +120,20 @@ void nvmetadata_unlock(struct nvmetadata *meta)
 struct nvmetadata *nvmetadata_instance()
 {
     return self->meta;
+}
+
+void nvmetadata_checkpoint(struct nvmetadata *meta)
+{
+    struct checkpoint *checkpoint;
+
+    checkpoint = checkpoint_new();
+    checkpoint_add(checkpoint, meta, sizeof(*meta));
+
+    nvmetadata_lock(meta);
+    checkpoint_commit(checkpoint);
+    nvmetadata_unlock(meta);
+
+    checkpoint_delete(checkpoint);
 }
 
 /******************************************************************************/
@@ -215,7 +233,7 @@ static void nvstore_handle_pagefault()
  *
  * Does not return anything meaningful.
  */
-static void *nvstore_tf_uffdworker(__attribute__((unused))void *args)
+static void *nvstore_tf_uffdworker(__attribute__((unused))void *arg)
 {
     struct pollfd pollfds[2]; /* 0: uffd, 1: killfd */
     int nready;
@@ -241,6 +259,63 @@ static void *nvstore_tf_uffdworker(__attribute__((unused))void *args)
     return NULL;
 }
 
+/**
+ * The worker thread function which services address region checkpoint requests.
+ * The input argument is not used. This function continuously polls for new 
+ * lists of addresses to checkpoint, checkpoints them, and then notifies the 
+ * sender that it is complete with its job.
+ * 
+ * Does not return anything meaningful.
+ */
+static void *nvstore_tf_crworker(__attribute__((unused))void *arg)
+{
+    struct vtslist_elem *tselem;
+    struct checkpoint *checkpoint;
+    struct vblock *block;
+
+    size_t i;
+    void *addr;
+
+    for (;;)
+    {
+        tselem = vtslist_pop_front(&self->crinput);
+        checkpoint = container_of(tselem, struct checkpoint, tselem);
+
+        pthread_mutex_lock(&checkpoint->lock);
+
+        /* Provide an escape for if a killswitch message was received. */
+        if (checkpoint->is_kill_message)
+        {
+            pthread_mutex_unlock(&checkpoint->lock);
+            break;
+        }
+
+        /* Otherwise, lock nvfs and checkpoint only the updated regions.*/
+        nvmetadata_lock(self->meta);
+        for (i = 0; i < checkpoint->addrs->len; i++)
+        {
+            addr = vtsdirtyset_remove(self->dirty, checkpoint->addrs->addrs[i]);
+            if (addr != NULL)
+            {
+                block = vtsaddrtable_find(self->table, addr);
+                vblock_dumpbypage(block, self->nvfs, addr);
+            }
+        }
+
+        checkpoint->finished = true;
+        nvmetadata_unlock(self->meta);
+
+        pthread_mutex_unlock(&checkpoint->lock);
+    }
+
+    return NULL;
+}
+
+/**
+ * Initializes the non-volatile filesystem. This function opens the file in 
+ * which volatile memory will be checkpointed, and initializes appropriate
+ * bookkeeping data structures which manage the data inside.
+ */
 static int nvstore_initnvfs(const char *filename)
 {
     /* initialization of container bookkeeping data structures */
@@ -268,6 +343,7 @@ static int nvstore_initnvfs(const char *filename)
     return 0;
 }
 
+/** Initializes a memory-mapped page which will be copied in upon pagefault. */
 static int nvstore_initmmap()
 {
     /* initialization of the empty page to be loaded in */
@@ -281,6 +357,7 @@ static int nvstore_initmmap()
     return 0;
 }
 
+/** Initializes the userfaultfd background worker to handle pagefaults. */
 static int nvstore_inituffdworker()
 {
     struct uffdio_api api;
@@ -309,6 +386,20 @@ static int nvstore_inituffdworker()
     if (rc != 0)
         return E_PTHREAD;
 
+    return 0;
+}
+
+/** Initializes the worker thread which handles checkpoint commit requests. */
+static int nvstore_initcrworker()
+{
+    int rc;
+
+    vtslist_init(&self->crinput);
+    rc = pthread_create(&self->crworker, NULL, nvstore_tf_crworker, NULL);
+
+    if (rc != 0)
+        return E_PTHREAD;
+    
     return 0;
 }
 
@@ -388,7 +479,7 @@ static struct vblock *nvstore_fetchnvfs()
 }
 
 /******************************************************************************/
-/** Public-Facing API ------------------------------------------------------- */
+/** Public-Facing API: nvstore ---------------------------------------------- */
 /******************************************************************************/
 int nvstore_init(const char *filename)
 {
@@ -406,6 +497,10 @@ int nvstore_init(const char *filename)
     if (rc != 0)
         return rc;
 
+    rc = nvstore_initcrworker();
+    if (rc != 0)
+        return rc;
+
     nvstore_initmeta();
     return 0;
 }
@@ -420,6 +515,7 @@ void *nvstore_allocpage(size_t npages)
 
 int nvstore_shutdown()
 {
+    struct checkpoint *checkpoint_killer;
     struct vtslist_elem *tselem;
     struct vblock *block;
     uint64_t postkill = 1;
@@ -427,7 +523,15 @@ int nvstore_shutdown()
     if (write(self->killfd, &postkill, sizeof(postkill)) != sizeof(postkill))
         return E_WRITE;
 
+    checkpoint_killer = checkpoint_new();
+    checkpoint_killer->is_kill_message = true;
+
+    nvstore_submit_checkpoint(checkpoint_killer);
+
     pthread_join(self->uffdworker, NULL);
+    pthread_join(self->crworker, NULL);
+
+    checkpoint_delete(checkpoint_killer);
 
     vtsdirtyset_delete(self->dirty);
     vtsaddrtable_delete(self->table);
@@ -453,7 +557,6 @@ int nvstore_shutdown()
 
 void nvstore_checkpoint()
 {
-    size_t i;
     void *addr;
     struct vblock *block;
 
@@ -466,4 +569,9 @@ void nvstore_checkpoint()
     }
 
     nvmetadata_unlock(self->meta);
+}
+
+void nvstore_submit_checkpoint(struct checkpoint *checkpoint)
+{
+    vtslist_push_back(&self->crinput, &checkpoint->tselem);
 }

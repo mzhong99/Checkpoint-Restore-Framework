@@ -26,7 +26,11 @@ struct vblock *vblock_new(void *pgaddr, size_t npages, off_t offset)
                              MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 
     if (pgaddr != NULL)
+    {
+        if (pgaddr != block->pgstart)
+            printf("pgaddr=%p, pgstart=%p\n", pgaddr, block->pgstart);
         assert(pgaddr == block->pgstart);
+    }
 
     return block;
 }

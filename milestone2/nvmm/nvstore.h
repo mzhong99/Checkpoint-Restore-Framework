@@ -6,6 +6,7 @@
 
 #include "list.h"
 #include "crmalloc.h"
+#include "checkpoint.h"
 
 #define E_NVFS          40
 #define E_UFFDOPEN      41
@@ -48,18 +49,24 @@ struct nvmetadata
     struct list mutexlist;          /* list of mutex handles                  */
 };
 
-/* used to manually control the write lock for the metadata */
+/** Used to manually control the write lock for the metadata */
 void nvmetadata_lock(struct nvmetadata *meta);
 void nvmetadata_unlock(struct nvmetadata *meta);
 
-/* singleton getter instance for global metadata */
+/** (Blocking) Checkpoints the metadata presented. */
+void nvmetadata_checkpoint(struct nvmetadata *meta);
+
+/** Singleton getter instance for global metadata */
 struct nvmetadata *nvmetadata_instance();
 
-/* actual API for nvstore itself, includes CRUD operations */
+/** Actual API for nvstore itself, includes CRUD operations */
 int nvstore_init(const char *filename);
 int nvstore_shutdown();
 
 void *nvstore_allocpage(size_t npages);
 void nvstore_checkpoint();
+
+/** Checkpoint only the region specified */
+void nvstore_submit_checkpoint(struct checkpoint *checkpoint);
 
 #endif

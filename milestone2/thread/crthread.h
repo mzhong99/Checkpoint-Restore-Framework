@@ -3,12 +3,16 @@
 
 #include "list.h"
 #include "vtslist.h"
+#include "checkpoint.h"
 
 #include <pthread.h>
 #include <setjmp.h>
 #include <limits.h>
 
-#define DEFAULT_STACKSIZE   (PTHREAD_STACK_MIN + 0x8000)
+#include <unistd.h>
+#include <signal.h>
+
+#define DEFAULT_STACKSIZE   (2 * PTHREAD_STACK_MIN)
 
 /* internal crthread handle - used to represent a non-volatile thread */
 struct crthread
@@ -16,27 +20,73 @@ struct crthread
     /* overhead variables for checkpoint-restore system                       */
     /* ---------------------------------------------------------------------- */
     struct list_elem elem;          /* used for insertions into threadlist    */
-    struct vtslist_elem vtselem;    /* used for insertions into vthreadtable  */
-    jmp_buf checkpoint;             /* save regs for checkpoint using setjmp  */
+    jmp_buf env;                    /* save regs for checkpoint using setjmp  */
     bool firstrun;                  /* skip restoration on first run          */
+    bool inprogress;                /* restore if execution was in progress   */
 
     /* normal thread variables                                                */
     /* ---------------------------------------------------------------------- */
     void *stack;                                 /* crmalloc'd stack          */
     uint8_t recoverystack[DEFAULT_STACKSIZE];    /* recovery stack to longjmp */
     size_t stacksize;                            /* size of main stack        */
-    void *(*taskfunc) (void *);     /* task / thread function                 */
-    void *arg;                      /* input arg - MUST be from crmalloc()    */
+    void *(*taskfunc) (void *);                  /* task function             */
+    void *arg;                                   /* the argument for thread   */
 
     /* transient fields - values must be restored after a crash with syscalls */
     /* ---------------------------------------------------------------------- */
     pthread_t ptid;                 /* the original thread ID variable        */
+    struct vtslist_elem vtselem;    /* used for insertions into vthreadtable  */
+    struct checkpoint *checkpoint;  /* checkpoint object for committing self  */
 };
 
-typedef pthread_t *crpthread_t;
-typedef pthread_attr_t crpthread_attr_t;
+/** 
+ * Initializes the threading system. Threads can only be created and destroyed
+ * after the backing system has been initialized.
+ * 
+ * Users should not call this function - rather, the framework itself uses this
+ * function as part of its calls.
+ */
+void crthread_init_system();
 
-int crpthread_create(crpthread_t *thread, void *(*routine) (void *), void *arg);
-int crpthread_join(crpthread_t thread, void **retval);
+/** 
+ * Constructs a new thread. Unlike the pthread library, creating a new thread
+ * does not instantly fork off the new function to be executed concurrently.
+ */
+struct crthread *crthread_new(void *(*taskfunc) (void *), size_t stacksize);
+
+/** 
+ * Deletes a thread. The thread should already be joined before deletion. 
+ * 
+ * Users should call this function.
+ */
+void crthread_delete(struct crthread *thread);
+
+/** 
+ * Forks the thread so that it starts background execution. Threads should be
+ * forked only once - subsequent calls to this function will do nothing.
+ * 
+ * Users should call this function.
+ */
+void crthread_fork(struct crthread *thread, void *arg);
+
+/** 
+ * Causes the calling thread to wait until the supplied thread has finished 
+ * execution. The result of the calling thread's function is returned to the 
+ * caller.
+ * 
+ * Users should call this function.
+ */
+void *crthread_join(struct crthread *thread);
+
+/**
+ * Checkpoints the calling thread. This should never be called in the main 
+ * thread. This operation only blocks and checkpoints the state of the calling
+ * thread - other threads must manually call this function for them to also be
+ * checkpointed.
+ * 
+ * Users can call this function.
+ */
+void crthread_checkpoint();
+
 
 #endif
