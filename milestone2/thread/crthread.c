@@ -25,6 +25,7 @@ static void crthread_restore(struct crthread *thread)
 
     pthread_attr_init(&attrs);
     pthread_attr_setstack(&attrs, thread->recoverystack, DEFAULT_STACKSIZE);
+    pthread_attr_setguardsize(&attrs, 0);
 
     pthread_create(&thread->ptid, &attrs, thread->taskfunc, thread);
     pthread_attr_destroy(&attrs);
@@ -33,7 +34,6 @@ static void crthread_restore(struct crthread *thread)
 static void *crthread_taskfunc(void *crthread_vp)
 {
     struct crthread *thread = crthread_vp;
-    void *retval;
 
     /* Initialization of Transient Fields                                     */
     /* ---------------------------------------------------------------------- */
@@ -51,8 +51,9 @@ static void *crthread_taskfunc(void *crthread_vp)
         /* If this is the thread's first execution, mark a starting checkpoint
          * and then run the task function inside. */
         thread->firstrun = false;
-        crthread_checkpoint();
-        retval = thread->taskfunc(thread->arg);
+        // crthread_checkpoint();
+        thread->retval = thread->taskfunc(thread->arg);
+        // crthread_checkpoint();
     }
     else
     {
@@ -73,7 +74,7 @@ static void *crthread_taskfunc(void *crthread_vp)
     /* Destroy thread checkpoint object. */
     checkpoint_delete(thread->checkpoint);
 
-    return retval;
+    return thread->retval;
 }
 
 /******************************************************************************/
@@ -104,6 +105,11 @@ void crthread_init_system()
     }
 
     pthread_mutex_unlock(&meta->threadlock);
+}
+
+void crthread_shutdown_system()
+{
+    vtsthreadtable_cleanup();
 }
 
 struct crthread *crthread_new(void *(*taskfunc) (void *), size_t stacksize)
@@ -157,6 +163,7 @@ void crthread_fork(struct crthread *thread, void *arg)
 
     pthread_attr_init(&attrs);
     pthread_attr_setstack(&attrs, thread->stack, thread->stacksize);
+    pthread_attr_setguardsize(&attrs, 0);
 
     pthread_create(&thread->ptid, &attrs, crthread_taskfunc, thread);
     pthread_attr_destroy(&attrs);

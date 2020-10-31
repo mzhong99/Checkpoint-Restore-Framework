@@ -29,37 +29,26 @@
 /******************************************************************************/
 int crheap_init(const char *filename)
 {
-    int rc;
-
     if (filename == NULL)
         filename = DEFAULT_NVFILE;
 
-    rc = nvstore_init(filename);
-    if (rc != 0)
-        return rc;
+    nvstore_init(filename);
+    crthread_init_system();
 
     return 0;
 }
 
 int crheap_shutdown()
 {
-    int rc;
-
-    rc = crheap_checkpoint();
-    if (rc != 0)
-        return rc;
-
-    rc = nvstore_shutdown();
-    if (rc != 0)
-        return rc;
-
+    crheap_checkpoint_everything();
+    crthread_shutdown_system();
+    nvstore_shutdown();
 
     return 0;
 }
 
-int crheap_checkpoint()
+int crheap_checkpoint_everything()
 {
-    nvstore_checkpoint();
-
+    nvstore_checkpoint_everything();
     return 0;
 }

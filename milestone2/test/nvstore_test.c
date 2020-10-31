@@ -111,7 +111,7 @@ const char *test_nvstore_checkpoint_simple()
         if (data[i] != refdata[i])
             return "Contents do not match prior to restoration.";
 
-    nvstore_checkpoint();
+    nvstore_checkpoint_everything();
 
     rc = nvstore_shutdown();
     if (rc != 0)
@@ -161,7 +161,7 @@ const char *test_nvstore_checkpoint_complex()
                 if (refdatamany[j][k] != datamany[j][k])
                     return "Contents do not match prior to restoration.";
 
-        nvstore_checkpoint();
+        nvstore_checkpoint_everything();
 
         rc = nvstore_shutdown();
         if (rc != 0)

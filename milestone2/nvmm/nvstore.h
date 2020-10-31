@@ -64,7 +64,7 @@ int nvstore_init(const char *filename);
 int nvstore_shutdown();
 
 void *nvstore_allocpage(size_t npages);
-void nvstore_checkpoint();
+void nvstore_checkpoint_everything();
 
 /** Checkpoint only the region specified */
 void nvstore_submit_checkpoint(struct checkpoint *checkpoint);

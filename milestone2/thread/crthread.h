@@ -12,7 +12,7 @@
 #include <unistd.h>
 #include <signal.h>
 
-#define DEFAULT_STACKSIZE   (2 * PTHREAD_STACK_MIN)
+#define DEFAULT_STACKSIZE   (16 * PTHREAD_STACK_MIN)
 
 /* internal crthread handle - used to represent a non-volatile thread */
 struct crthread
@@ -31,6 +31,7 @@ struct crthread
     size_t stacksize;                            /* size of main stack        */
     void *(*taskfunc) (void *);                  /* task function             */
     void *arg;                                   /* the argument for thread   */
+    void *retval;                                /* result of execution       */
 
     /* transient fields - values must be restored after a crash with syscalls */
     /* ---------------------------------------------------------------------- */
@@ -47,6 +48,12 @@ struct crthread
  * function as part of its calls.
  */
 void crthread_init_system();
+
+/** 
+ * Shuts down the thread spawning system. We assume that all threads have 
+ * already been joined prior to shutting down this system.
+ */
+void crthread_shutdown_system();
 
 /** 
  * Constructs a new thread. Unlike the pthread library, creating a new thread

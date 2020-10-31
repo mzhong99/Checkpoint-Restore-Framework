@@ -5,6 +5,8 @@
 #include <stdbool.h>
 #include <pthread.h>
 
+#include <semaphore.h>
+
 #include "vaddrlist.h"
 #include "vtslist.h"
 
@@ -38,11 +40,8 @@ struct checkpoint
     struct vaddrlist *addrs;
     struct vtslist_elem tselem;
 
-    bool finished;
     bool is_kill_message;
-
-    pthread_mutex_t lock;
-    pthread_cond_t cond_finished;
+    sem_t finished;
 };
 
 struct checkpoint *checkpoint_new();
@@ -50,5 +49,6 @@ void checkpoint_delete(struct checkpoint *checkpoint);
 
 void checkpoint_add(struct checkpoint *checkpoint, void *addr, size_t len);
 void checkpoint_commit(struct checkpoint *checkpoint);
+void checkpoint_post_commit_finished(struct checkpoint *checkpoint);
 
 #endif

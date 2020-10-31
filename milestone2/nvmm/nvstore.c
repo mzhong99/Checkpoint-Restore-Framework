@@ -281,14 +281,9 @@ static void *nvstore_tf_crworker(__attribute__((unused))void *arg)
         tselem = vtslist_pop_front(&self->crinput);
         checkpoint = container_of(tselem, struct checkpoint, tselem);
 
-        pthread_mutex_lock(&checkpoint->lock);
-
         /* Provide an escape for if a killswitch message was received. */
         if (checkpoint->is_kill_message)
-        {
-            pthread_mutex_unlock(&checkpoint->lock);
             break;
-        }
 
         /* Otherwise, lock nvfs and checkpoint only the updated regions.*/
         nvmetadata_lock(self->meta);
@@ -302,10 +297,8 @@ static void *nvstore_tf_crworker(__attribute__((unused))void *arg)
             }
         }
 
-        checkpoint->finished = true;
         nvmetadata_unlock(self->meta);
-
-        pthread_mutex_unlock(&checkpoint->lock);
+        checkpoint_post_commit_finished(checkpoint);
     }
 
     return NULL;
@@ -348,8 +341,8 @@ static int nvstore_initmmap()
 {
     /* initialization of the empty page to be loaded in */
     self->tmppage = mc_mmap(NULL, sysconf(_SC_PAGE_SIZE), 
-                            PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS,
-                            -1, 0);
+                            PROT_READ | PROT_WRITE | PROT_EXEC, 
+                            MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 
     if (self->tmppage == MAP_FAILED)
         return E_MMAP;
@@ -538,6 +531,9 @@ int nvstore_shutdown()
 
     if (mc_munmap(self->tmppage, sysconf(_SC_PAGE_SIZE)) != 0)
         return E_MMAP;
+    
+    pthread_mutex_destroy(&self->meta->mutexlock);
+    pthread_mutex_destroy(&self->meta->threadlock);
 
     while ((tselem = vtslist_try_pop_front(&self->blocks)) != NULL)
     {
@@ -555,7 +551,7 @@ int nvstore_shutdown()
     return 0;
 }
 
-void nvstore_checkpoint()
+void nvstore_checkpoint_everything()
 {
     void *addr;
     struct vblock *block;

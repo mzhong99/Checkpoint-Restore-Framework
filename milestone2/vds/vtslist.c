@@ -22,36 +22,26 @@ void vtslist_cleanup(struct vtslist *vtslist)
 
 void vtslist_push_back(struct vtslist *vtslist, struct vtslist_elem *tselem)
 {
-    bool was_empty;
-
     tselem->owner = vtslist;
 
     pthread_mutex_lock(&vtslist->lock);
 
-    was_empty = list_empty(&vtslist->list);
     list_push_back(&vtslist->list, &tselem->elem);
 
+    pthread_cond_signal(&vtslist->haselems);
     pthread_mutex_unlock(&vtslist->lock);
-
-    if (was_empty)
-        pthread_cond_signal(&vtslist->haselems);
 }
 
 void vtslist_push_front(struct vtslist *vtslist, struct vtslist_elem *tselem)
 {
-    bool was_empty;
-
     tselem->owner = vtslist;
 
     pthread_mutex_lock(&vtslist->lock);
 
-    was_empty = list_empty(&vtslist->list);
     list_push_front(&vtslist->list, &tselem->elem);
 
+    pthread_cond_signal(&vtslist->haselems);
     pthread_mutex_unlock(&vtslist->lock);
-
-    if (was_empty)
-        pthread_cond_signal(&vtslist->haselems);
 }
 
 struct vtslist_elem *vtslist_pop_back(struct vtslist *vtslist)

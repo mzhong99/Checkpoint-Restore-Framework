@@ -68,5 +68,5 @@ int crprintf(const char * __restrict fmt, ...);
  *     0 -> checkpoint was successful
  *     <error codes go here>
  */
-int crheap_checkpoint();
+int crheap_checkpoint_everything();
 

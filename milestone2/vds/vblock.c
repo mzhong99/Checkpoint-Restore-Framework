@@ -22,7 +22,7 @@ struct vblock *vblock_new(void *pgaddr, size_t npages, off_t offset)
 
     block->npages = npages;
     block->pgstart = mc_mmap(pgaddr, npages * sysconf(_SC_PAGE_SIZE), 
-                             PROT_READ | PROT_WRITE, 
+                             PROT_READ | PROT_WRITE | PROT_EXEC, 
                              MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 
     if (pgaddr != NULL)

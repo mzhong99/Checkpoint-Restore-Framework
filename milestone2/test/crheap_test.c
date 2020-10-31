@@ -6,9 +6,11 @@
 #include "vaddrlist_test.h"
 #include "vblock_test.h"
 #include "vtsaddrtable_test.h"
+#include "vtslist_test.h"
 #include "nvstore_test.h"
 #include "memcheck_test.h"
 #include "crmalloc_test.h"
+#include "crthread_test.h"
 
 /**
  * Usually, I try to keep a strict line limit of 80 characters. This is the only
@@ -62,6 +64,16 @@ void run_all_tests()
     run_test(test_crmalloc_complex, "crmalloc", "Complex crmalloc() and crfree()");
     run_test(test_crmalloc_recovery, "crmalloc", "Heap checkpointing and restoration");
     run_test(test_crmalloc_integration, "crmalloc", "Integration of crmalloc(), crfree(), and crrealloc()");
+
+    /**************************************************************************/
+    /** Tests: vtslist ------------------------------------------------------ */
+    /**************************************************************************/
+    run_test(test_vtslist_message_passing, "vtslist", "Thread-safe message passing");
+
+    /**************************************************************************/
+    /** Tests: crthread ----------------------------------------------------- */
+    /**************************************************************************/
+    run_test(test_crthread_basic, "crthread", "Basic crthread test");
 
     mc_report();
 }

@@ -3,6 +3,7 @@
 #include "nvstore.h"
 
 #include <stdlib.h>
+#include <assert.h>
 
 /** Creates a new checkpoint object. */
 struct checkpoint *checkpoint_new()
@@ -12,11 +13,8 @@ struct checkpoint *checkpoint_new()
     checkpoint = mc_malloc(sizeof(*checkpoint));
     checkpoint->addrs = vaddrlist_new(NVADDRLIST_INIT_POWER);
 
-    checkpoint->finished = false;
     checkpoint->is_kill_message = false;
-
-    pthread_mutex_init(&checkpoint->lock, NULL);
-    pthread_cond_init(&checkpoint->cond_finished, NULL);
+    sem_init(&checkpoint->finished, 0, 0);
 
     return checkpoint;
 }
@@ -25,10 +23,6 @@ struct checkpoint *checkpoint_new()
 void checkpoint_delete(struct checkpoint *checkpoint)
 {
     vaddrlist_delete(checkpoint->addrs);
-
-    pthread_cond_destroy(&checkpoint->cond_finished);
-    pthread_mutex_destroy(&checkpoint->lock);
-
     mc_free(checkpoint);
 }
 
@@ -44,12 +38,12 @@ void checkpoint_add(struct checkpoint *checkpoint, void *addr, size_t len)
  */
 void checkpoint_commit(struct checkpoint *checkpoint)
 {
-    pthread_mutex_lock(&checkpoint->lock);
-
     nvstore_submit_checkpoint(checkpoint);
+    sem_wait(&checkpoint->finished);
+}
 
-    while (!checkpoint->finished)
-        pthread_cond_wait(&checkpoint->cond_finished, &checkpoint->lock);
-
-    pthread_mutex_unlock(&checkpoint->lock);
+/** Marks the commit as finished - should only be called by system. */
+void checkpoint_post_commit_finished(struct checkpoint *checkpoint)
+{
+    sem_post(&checkpoint->finished);
 }

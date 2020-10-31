@@ -8,6 +8,7 @@
 #include <stdio.h>
 
 #include <locale.h>
+#include <pthread.h>
 
 /******************************************************************************/
 /** Macros, Definitions, and Static Variables ------------------------------- */
@@ -33,11 +34,21 @@ struct mc_table
     size_t nalloc;
     size_t nfree;
     struct mc_node *data[TABLE_SIZE];
+
+    pthread_mutex_t lock;
 };
 
 /* self instance for object-oriented access */
-static struct mc_table s_table = 
-{ .nelem = 0, .btotal = 0, .nalloc = 0, .nfree = 0, .data = {0} };
+static struct mc_table s_table =
+{
+    .nelem = 0, 
+    .btotal = 0, 
+    .nalloc = 0, 
+    .nfree = 0, 
+    .data = {0}, 
+    .lock = PTHREAD_MUTEX_INITIALIZER
+};
+
 static struct mc_table *self = &s_table;
 
 /* node management functions */
@@ -142,9 +153,13 @@ void *mc_malloc(size_t size)
     ptr = malloc(size);
     if (ptr == NULL)
         return ptr;
+    
+    pthread_mutex_lock(&self->lock);
 
     node = mc_node_new(MC_MALLOC, ptr, 1, size);
     mc_table_insert(node);
+
+    pthread_mutex_unlock(&self->lock);
 
     return ptr;
 }
@@ -161,8 +176,12 @@ void *mc_calloc(size_t nmemb, size_t size)
     if (ptr == NULL)
         return ptr;
 
+    pthread_mutex_lock(&self->lock);
+
     node = mc_node_new(MC_CALLOC, ptr, nmemb, size);
     mc_table_insert(node);
+
+    pthread_mutex_unlock(&self->lock);
 
     return ptr;
 }
@@ -182,9 +201,13 @@ void *mc_realloc(void *ptr, size_t size)
     if (rptr == NULL)
         return rptr;
 
+    pthread_mutex_lock(&self->lock);
+
     mc_table_del(ptr);
     node = mc_node_new(MC_REALLOC, rptr, 1, size);
     mc_table_insert(node);
+
+    pthread_mutex_unlock(&self->lock);
 
     return rptr;
 }
@@ -196,6 +219,8 @@ void mc_free(void *ptr)
     if (ptr == NULL)
         return;
 
+    pthread_mutex_lock(&self->lock);
+
     worked = mc_table_del(ptr);
 
     if (!worked)
@@ -205,6 +230,8 @@ void mc_free(void *ptr)
     }
 
     free(ptr);
+
+    pthread_mutex_unlock(&self->lock);
 }
 
 void *mc_mmap(void *addr, size_t len, int prot, int flags, int fd, off_t off)
@@ -220,8 +247,12 @@ void *mc_mmap(void *addr, size_t len, int prot, int flags, int fd, off_t off)
     if (ptr == MAP_FAILED)
         return ptr;
 
+    pthread_mutex_lock(&self->lock);
+
     node = mc_node_new(MC_MMAP, ptr, 1, len);
     mc_table_insert(node);
+
+    pthread_mutex_unlock(&self->lock);
         
     return ptr;
 }
@@ -230,8 +261,12 @@ int mc_munmap(void *addr, size_t len)
 {
     int rc;
 
+    pthread_mutex_lock(&self->lock);
+
     rc = munmap(addr, len);
     mc_table_del(addr);
+
+    pthread_mutex_unlock(&self->lock);
 
     return rc;
 }
@@ -251,6 +286,8 @@ void mc_report()
 
     printf(ANSI_COLOR_RESET);
 
+    pthread_mutex_lock(&self->lock);
+
     printf("%'ld un-freed allocations. %s\n", 
             self->nelem, 
             self->nelem == 0 ? ANSI_COLOR_GREEN "No leaks possible!" ANSI_COLOR_RESET 
@@ -264,6 +301,8 @@ void mc_report()
             printf("Allocation: %p (%s) [size=%'ld, nmemb=%'ld]\n",
                    chain->addr, MC_TYPE_STR[chain->type], 
                    chain->size, chain->nmemb);
+
+    pthread_mutex_unlock(&self->lock);
 
     printf(ANSI_COLOR_RESET);
 }
