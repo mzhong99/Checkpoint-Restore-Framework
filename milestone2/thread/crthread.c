@@ -9,15 +9,70 @@
 /** Macros, Definitions, and Static Variables ------------------------------- */
 /******************************************************************************/
 
+/** 
+ * Used to register the stack to be checkpointed. Since stacks grow downwards,
+ * and since we believe attempting to checkpoint any stack frame mid-execution
+ * causes a hard-to-trace crash which even crashes GDB, we need to separate the
+ * main execution stack from the guard.
+ * 
+ * Do not checkpoint the stack directly. Use this function instead.
+*/
+static void crthread_add_stack_to_checkpoint(struct crthread *thread, 
+                                             struct checkpoint *checkpoint);
+
 /** Used as a wrapper for restoration hook on subsequent runs */
 static void *crthread_taskfunc(void *thread_vp);
 
 /** Used to restore a stale thread upon program restart */
 static void crthread_restore(struct crthread *thread);
 
+/** Used to recursively descend the stack until the interrupt guard is found  */
+static void crthread_descend_and_checkpoint(struct crthread *thread);
+
 /******************************************************************************/
 /** Private Implementation -------------------------------------------------- */
 /******************************************************************************/
+static void crthread_add_stack_to_checkpoint(struct crthread *thread, 
+                                             struct checkpoint *checkpoint)
+{
+    size_t user_stacksize;
+    void *user_stacktop;
+
+    user_stacksize = thread->stacksize - INTERRUPT_GUARD_SIZE;
+    user_stacktop = (uint8_t *)thread->stack + INTERRUPT_GUARD_SIZE;
+
+    checkpoint_add(checkpoint, user_stacktop, user_stacksize);
+}
+
+static void crthread_descend_and_checkpoint(struct crthread *thread)
+{
+    /* Check where we currently are located on the thread stack. */
+    volatile void *stackprobe = &thread;
+
+    /* First, we ensure that we have never overflown the stack by checking that
+     * we have yet to pass the guard. */
+    assert(stackprobe > thread->stack);
+
+    /* Next, if we're still too high in the stack (not enough function calls) 
+     * then we perform a recursive descent and skip the checkpoint. */
+    if (stackprobe > thread->stack + INTERRUPT_GUARD_SIZE)
+    {
+        crthread_descend_and_checkpoint(thread);
+        return;
+    }
+
+    /* Finally, once we're actually deep enough in the stack, we can checkpoint
+     * for real. We should have surpassed all user space for our stack. */
+    checkpoint_commit(thread->checkpoint);
+
+    /* Once the checkpoint is finished, simply longjmp back to the moment when
+     * this thread started descending the stack by piercing through all 
+     * recursive calls, and continue execution as normal. */
+    longjmp(thread->env, 1);
+
+    /* The longjmp should work - we should never reach this point. */
+    assert(false);
+}
 
 static void crthread_restore(struct crthread *thread)
 {
@@ -44,7 +99,7 @@ static void *crthread_taskfunc(void *crthread_vp)
     /* Create thread checkpoint object, specifying what memory to checkpoint. */
     thread->checkpoint = checkpoint_new();
     checkpoint_add(thread->checkpoint, thread, sizeof(*thread));
-    checkpoint_add(thread->checkpoint, thread->stack, thread->stacksize);
+    crthread_add_stack_to_checkpoint(thread, thread->checkpoint);
     
     if (thread->firstrun)
     {
@@ -63,7 +118,6 @@ static void *crthread_taskfunc(void *crthread_vp)
         /* TODO: use mprotect() to handle execution permissions. */
         longjmp(thread->env, 1);
     }
-
 
     /* Destruction of Transient Fields                                        */
     /* ---------------------------------------------------------------------- */
@@ -125,7 +179,8 @@ struct crthread *crthread_new(void *(*taskfunc) (void *), size_t stacksize)
     if (stacksize > DEFAULT_STACKSIZE)
         crthread->stacksize = stacksize & ~(sysconf(_SC_PAGE_SIZE) - 1);
 
-    crthread->stack = crmalloc(crthread->stacksize);
+    // crthread->stack = crmalloc(crthread->stacksize);
+    crthread->stack = nvstore_allocpage(crthread->stacksize / sysconf(_SC_PAGE_SIZE));
 
     crthread->taskfunc = taskfunc;
 
@@ -151,7 +206,7 @@ void crthread_delete(struct crthread *crthread)
     list_remove(&crthread->elem);
     pthread_mutex_unlock(&meta->threadlock);
 
-    crfree(crthread->stack);
+    // crfree(crthread->stack);
     crfree(crthread);
 }
 
@@ -205,9 +260,11 @@ void crthread_checkpoint()
 
     ptid = pthread_self();
     thread = vtsthreadtable_find(ptid);
+
     assert(thread != NULL);
 
+    /* Set a marker to which to jump. Then, descend to guard and checkpoint. */
     rc = setjmp(thread->env);
     if (rc == 0)
-        checkpoint_commit(thread->checkpoint);
+        crthread_descend_and_checkpoint(thread);
 }

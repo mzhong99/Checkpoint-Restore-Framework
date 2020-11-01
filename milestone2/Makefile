@@ -17,10 +17,12 @@ CC = gcc
 COVERAGE_INFO = coverage.info
 COVERAGE_DIR = coverage
 
-DEBUG_FLAGS = -coverage -ggdb3 -O0
+DEBUG_FLAGS = -coverage -ggdb3 -O0 
+DISABLED_FLAGS = -fno-optimize-sibling-calls -fno-stack-check 
+
 WARN_FLAGS = -Wall -Wextra
 
-CFLAGS = -std=gnu99 $(WARN_FLAGS) $(DEBUG_FLAGS) 
+CFLAGS = -std=gnu11 $(WARN_FLAGS) $(DEBUG_FLAGS) $(DISABLED_FLAGS)
 LFLAGS = -pthread
 IFLAGS = $(addprefix -I, $(SRC_SUBDIRS))
 
@@ -77,7 +79,7 @@ clean:
 	@echo "[DEL] GCOV files (*.gcov, *.gcda, *.gcno)"
 	@$(DEL) $(GCOV_CFILES) $(GCDA_CFILES) $(GCNO_CFILES)
 	
-	@# Be careful with this line if you edit it - it uses rm -rf to remove folder
+	@# Be careful with this line if you edit it - it uses rm -rf to remove dir
 	@echo "[DEL] Coverage info"
 	@$(DEL) -r $(COVERAGE_DIR) $(COVERAGE_INFO)
 	

@@ -12,7 +12,8 @@
 #include <unistd.h>
 #include <signal.h>
 
-#define DEFAULT_STACKSIZE   (16 * PTHREAD_STACK_MIN)
+#define INTERRUPT_GUARD_SIZE    (2 * PTHREAD_STACK_MIN)
+#define DEFAULT_STACKSIZE       ((2 * PTHREAD_STACK_MIN) + INTERRUPT_GUARD_SIZE)
 
 /* internal crthread handle - used to represent a non-volatile thread */
 struct crthread
@@ -52,6 +53,9 @@ void crthread_init_system();
 /** 
  * Shuts down the thread spawning system. We assume that all threads have 
  * already been joined prior to shutting down this system.
+ * 
+ * Users should not call this function - rather, the framework itself uses this
+ * function as part of its calls.
  */
 void crthread_shutdown_system();
 
