@@ -9,7 +9,6 @@
 
 #include <semaphore.h>
 #include <pthread.h>
-#include <setjmp.h>
 #include <ucontext.h>
 #include <limits.h>
 
@@ -25,7 +24,8 @@ struct crthread
     /* overhead variables for checkpoint-restore system                       */
     /* ---------------------------------------------------------------------- */
     struct list_elem elem;          /* used for insertions into threadlist    */
-    jmp_buf env;                    /* save regs for checkpoint using setjmp  */
+    ucontext_t env;                 /* save for checkpoint using getcontext   */
+    volatile bool from_restore;     /* used to knows where setcontext is from */
     bool firstrun;                  /* skip restoration on first run          */
     bool inprogress;                /* restore if execution was in progress   */
 

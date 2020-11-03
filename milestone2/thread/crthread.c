@@ -45,10 +45,10 @@ static void *crthread_taskfunc(void *crthread_vp)
     else
     {
         /* Otherwise, allow execution privileges on the proper stack segment
-         * and then jump directly to continue exeuciton. */
+         * and then jump directly to continue exeuction. */
 
         /* TODO: use mprotect() to handle execution permissions. */
-        longjmp(thread->env, 1);
+        setcontext(&thread->env);
     }
 
     /* Destruction of Transient Fields                                        */
@@ -60,12 +60,14 @@ static void *crthread_taskfunc(void *crthread_vp)
     /* Destroy thread checkpoint object. */
     checkpoint_delete(thread->checkpoint);
 
+    /* Post to calling thread that execution is complete. */
+    sem_post(thread->userjoin);
+    
     /* Exit this function manually. DO NOT RETURN, in case of recovery. */
     pthread_exit(NULL);
 
     /* Function should never reach this point. */
-    assert(false);
-    return NULL;
+    assert(NULL);
 }
 
 /******************************************************************************/
@@ -127,6 +129,7 @@ struct crthread *crthread_new(void *(*taskfunc) (void *), size_t stacksize)
 
     crthread->taskfunc = taskfunc;
 
+    crthread->from_restore = false;
     crthread->firstrun = true;
     crthread->ptid = -1;
 
@@ -149,6 +152,8 @@ void crthread_delete(struct crthread *crthread)
     list_remove(&crthread->elem);
     pthread_mutex_unlock(&meta->threadlock);
 
+    sem_destroy(crthread->userjoin);
+    mc_free(crthread->userjoin);
     crfree(crthread->stack);
     crfree(crthread);
 }
@@ -197,21 +202,23 @@ void crthread_checkpoint()
 {
     struct crthread *thread = NULL;
     pthread_t ptid;
-    int rc;
 
     ptid = pthread_self();
     thread = vtsthreadtable_find(ptid);
 
     assert(thread != NULL);
+    thread->from_restore = false;
 
     /* Set a marker to which to jump. Then, submit this thread to the 
      * resurrector and exit for restoration. */
-    rc = setjmp(thread->env);
-    if (rc == 0)
+    getcontext(&thread->env);
+    if (thread->from_restore)
     {
         resurrector_checkpoint(thread);
         pthread_exit(NULL);
     }
+
+    thread->from_restore = false;
 }
 
 void crthread_restore(struct crthread *thread, bool from_file)
@@ -227,6 +234,8 @@ void crthread_restore(struct crthread *thread, bool from_file)
         thread->userjoin = mc_malloc(sizeof(*thread->userjoin));
         sem_init(thread->userjoin, 0, 0);
     }
+
+    thread->from_restore = true;
 
     pthread_create(&thread->ptid, &attrs, crthread_taskfunc, thread);
     pthread_attr_destroy(&attrs);
