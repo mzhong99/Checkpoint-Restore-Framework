@@ -2,6 +2,7 @@
 #include "crheap.h"
 #include "nvstore.h"
 #include "vtsthreadtable.h"
+#include "resurrector.h"
 
 #include <assert.h>
 
@@ -9,83 +10,12 @@
 /** Macros, Definitions, and Static Variables ------------------------------- */
 /******************************************************************************/
 
-/** 
- * Used to register the stack to be checkpointed. Since stacks grow downwards,
- * and since we believe attempting to checkpoint any stack frame mid-execution
- * causes a hard-to-trace crash which even crashes GDB, we need to separate the
- * main execution stack from the guard.
- * 
- * Do not checkpoint the stack directly. Use this function instead.
-*/
-static void crthread_add_stack_to_checkpoint(struct crthread *thread, 
-                                             struct checkpoint *checkpoint);
-
 /** Used as a wrapper for restoration hook on subsequent runs */
 static void *crthread_taskfunc(void *thread_vp);
-
-/** Used to restore a stale thread upon program restart */
-static void crthread_restore(struct crthread *thread);
-
-/** Used to recursively descend the stack until the interrupt guard is found  */
-static void crthread_descend_and_checkpoint(struct crthread *thread);
 
 /******************************************************************************/
 /** Private Implementation -------------------------------------------------- */
 /******************************************************************************/
-static void crthread_add_stack_to_checkpoint(struct crthread *thread, 
-                                             struct checkpoint *checkpoint)
-{
-    size_t user_stacksize;
-    void *user_stacktop;
-
-    user_stacksize = thread->stacksize - INTERRUPT_GUARD_SIZE;
-    user_stacktop = (uint8_t *)thread->stack + INTERRUPT_GUARD_SIZE;
-
-    checkpoint_add(checkpoint, user_stacktop, user_stacksize);
-}
-
-static void crthread_descend_and_checkpoint(struct crthread *thread)
-{
-    /* Check where we currently are located on the thread stack. */
-    volatile void *stackprobe = &thread;
-
-    /* First, we ensure that we have never overflown the stack by checking that
-     * we have yet to pass the guard. */
-    assert(stackprobe > thread->stack);
-
-    /* Next, if we're still too high in the stack (not enough function calls) 
-     * then we perform a recursive descent and skip the checkpoint. */
-    if (stackprobe > thread->stack + INTERRUPT_GUARD_SIZE)
-    {
-        crthread_descend_and_checkpoint(thread);
-        return;
-    }
-
-    /* Finally, once we're actually deep enough in the stack, we can checkpoint
-     * for real. We should have surpassed all user space for our stack. */
-    checkpoint_commit(thread->checkpoint);
-
-    /* Once the checkpoint is finished, simply longjmp back to the moment when
-     * this thread started descending the stack by piercing through all 
-     * recursive calls, and continue execution as normal. */
-    longjmp(thread->env, 1);
-
-    /* The longjmp should work - we should never reach this point. */
-    assert(false);
-}
-
-static void crthread_restore(struct crthread *thread)
-{
-    pthread_attr_t attrs;
-
-    pthread_attr_init(&attrs);
-    pthread_attr_setstack(&attrs, thread->recoverystack, DEFAULT_STACKSIZE);
-    pthread_attr_setguardsize(&attrs, 0);
-
-    pthread_create(&thread->ptid, &attrs, thread->taskfunc, thread);
-    pthread_attr_destroy(&attrs);
-}
-
 static void *crthread_taskfunc(void *crthread_vp)
 {
     struct crthread *thread = crthread_vp;
@@ -99,16 +29,18 @@ static void *crthread_taskfunc(void *crthread_vp)
     /* Create thread checkpoint object, specifying what memory to checkpoint. */
     thread->checkpoint = checkpoint_new();
     checkpoint_add(thread->checkpoint, thread, sizeof(*thread));
-    crthread_add_stack_to_checkpoint(thread, thread->checkpoint);
+    checkpoint_add(thread->checkpoint, thread->stack, thread->stacksize);
     
     if (thread->firstrun)
     {
         /* If this is the thread's first execution, mark a starting checkpoint
          * and then run the task function inside. */
         thread->firstrun = false;
-        // crthread_checkpoint();
+
+        /* Checkpoint BEFORE and AFTER thread execution. */
+        crthread_checkpoint();
         thread->retval = thread->taskfunc(thread->arg);
-        // crthread_checkpoint();
+        crthread_checkpoint();
     }
     else
     {
@@ -128,7 +60,12 @@ static void *crthread_taskfunc(void *crthread_vp)
     /* Destroy thread checkpoint object. */
     checkpoint_delete(thread->checkpoint);
 
-    return thread->retval;
+    /* Exit this function manually. DO NOT RETURN, in case of recovery. */
+    pthread_exit(NULL);
+
+    /* Function should never reach this point. */
+    assert(false);
+    return NULL;
 }
 
 /******************************************************************************/
@@ -145,6 +82,7 @@ void crthread_init_system()
     meta = nvmetadata_instance();
 
     vtsthreadtable_init();
+    resurrector_init();
 
     pthread_mutex_lock(&meta->threadlock);
 
@@ -153,7 +91,7 @@ void crthread_init_system()
     {
         thread = container_of(elem, struct crthread, elem);
         if (thread->inprogress)
-            crthread_restore(thread);
+            crthread_restore(thread, true);
 
         elem = list_next(elem);
     }
@@ -164,6 +102,7 @@ void crthread_init_system()
 void crthread_shutdown_system()
 {
     vtsthreadtable_cleanup();
+    resurrector_shutdown();
 }
 
 struct crthread *crthread_new(void *(*taskfunc) (void *), size_t stacksize)
@@ -179,8 +118,12 @@ struct crthread *crthread_new(void *(*taskfunc) (void *), size_t stacksize)
     if (stacksize > DEFAULT_STACKSIZE)
         crthread->stacksize = stacksize & ~(sysconf(_SC_PAGE_SIZE) - 1);
 
-    // crthread->stack = crmalloc(crthread->stacksize);
-    crthread->stack = nvstore_allocpage(crthread->stacksize / sysconf(_SC_PAGE_SIZE));
+    crthread->stack = crmalloc(crthread->stacksize);
+
+    /* Semaphore is initialized outside of task function so that main thread can
+     * join with this crthread. */
+    crthread->userjoin = mc_malloc(sizeof(*crthread->userjoin));
+    sem_init(crthread->userjoin, 0, 0);
 
     crthread->taskfunc = taskfunc;
 
@@ -206,7 +149,7 @@ void crthread_delete(struct crthread *crthread)
     list_remove(&crthread->elem);
     pthread_mutex_unlock(&meta->threadlock);
 
-    // crfree(crthread->stack);
+    crfree(crthread->stack);
     crfree(crthread);
 }
 
@@ -226,12 +169,10 @@ void crthread_fork(struct crthread *thread, void *arg)
 
 void *crthread_join(struct crthread *thread)
 {
-    void *retval;
-
-    pthread_join(thread->ptid, &retval);
+    sem_wait(thread->userjoin);
     thread->inprogress = false;
 
-    return retval;
+    return thread->retval;
 }
 
 /**
@@ -263,8 +204,30 @@ void crthread_checkpoint()
 
     assert(thread != NULL);
 
-    /* Set a marker to which to jump. Then, descend to guard and checkpoint. */
+    /* Set a marker to which to jump. Then, submit this thread to the 
+     * resurrector and exit for restoration. */
     rc = setjmp(thread->env);
     if (rc == 0)
-        crthread_descend_and_checkpoint(thread);
+    {
+        resurrector_checkpoint(thread);
+        pthread_exit(NULL);
+    }
+}
+
+void crthread_restore(struct crthread *thread, bool from_file)
+{
+    pthread_attr_t attrs;
+
+    pthread_attr_init(&attrs);
+    pthread_attr_setstack(&attrs, thread->recoverystack, DEFAULT_STACKSIZE);
+    pthread_attr_setguardsize(&attrs, 0);
+
+    if (from_file)
+    {
+        thread->userjoin = mc_malloc(sizeof(*thread->userjoin));
+        sem_init(thread->userjoin, 0, 0);
+    }
+
+    pthread_create(&thread->ptid, &attrs, crthread_taskfunc, thread);
+    pthread_attr_destroy(&attrs);
 }

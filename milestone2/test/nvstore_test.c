@@ -186,3 +186,71 @@ const char *test_nvstore_checkpoint_complex()
 
     return NULL;
 }
+
+const char *test_nvstore_checkpoint_without_shutdown()
+{
+    uint8_t *datamany[LARGE_NUM_PAGES], *refdatamany[LARGE_NUM_PAGES];
+    int i, j, k, rc;
+
+    for (i = 0; i < LARGE_NUM_PAGES; i++)
+    {
+        rc = nvstore_init("test_nvstore_checkpoint_without_shutdown.heap");
+        if (rc != 0)
+            return "First initialization failed.";
+
+        refdatamany[i] = mc_malloc((i + 1) * sysconf(_SC_PAGE_SIZE));
+        datamany[i] = nvstore_allocpage(i + 1);
+
+        for (j = 0; j <= i; j++)
+        {
+            for (k = 0; k < (j + 1) * sysconf(_SC_PAGE_SIZE); k++)
+            {
+                refdatamany[j][k] = (uint8_t)rand();
+                datamany[j][k] = refdatamany[j][k];
+            }
+        }
+        
+        for (j = 0; j <= i; j++)
+            for (k = 0; k < (j + 1) * sysconf(_SC_PAGE_SIZE); k++)
+                if (refdatamany[j][k] != datamany[j][k])
+                    return "Contents do not match prior to restoration.";
+
+        nvstore_checkpoint_everything();
+
+        for (j = 0; j <= i; j++)
+            for (k = 0; k < (j + 1) * sysconf(_SC_PAGE_SIZE); k++)
+                if (refdatamany[j][k] != datamany[j][k])
+                    return "Contents do not match after first checkpoint but "
+                           "before first shutdown.";
+
+        rc = nvstore_shutdown();
+        if (rc != 0)
+            return "First shutdown failed";
+
+        rc = nvstore_init("test_nvstore_checkpoint_without_shutdown.heap");
+        if (rc != 0)
+            return "Second initialization failed.";
+
+        for (j = 0; j <= i; j++)
+            for (k = 0; k < (j + 1) * sysconf(_SC_PAGE_SIZE); k++)
+                if (refdatamany[j][k] != datamany[j][k])
+                    return "Contents do not match after restoration.";
+
+        nvstore_checkpoint_everything();
+
+        for (j = 0; j <= i; j++)
+            for (k = 0; k < (j + 1) * sysconf(_SC_PAGE_SIZE); k++)
+                if (refdatamany[j][k] != datamany[j][k])
+                    return "Contents do not match after restart + checkpoint "
+                           "but before shutdown.";
+
+        rc = nvstore_shutdown();
+        if (rc != 0)
+            return "Second shutdown failed";
+    }
+
+    for (i = 0; i < LARGE_NUM_PAGES; i++)
+        mc_free(refdatamany[i]);
+
+    return NULL;
+}

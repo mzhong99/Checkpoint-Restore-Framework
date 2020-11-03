@@ -1,5 +1,6 @@
 #include "fibonacci.h"
 #include <stdint.h>
+#include <stdio.h>
 
 void *fibonacci_tf_serial(void *n_vp)
 {

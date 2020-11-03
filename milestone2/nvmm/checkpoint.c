@@ -1,6 +1,7 @@
 #include "checkpoint.h"
 #include "memcheck.h"
 #include "nvstore.h"
+#include "crmalloc.h"
 
 #include <stdlib.h>
 #include <assert.h>

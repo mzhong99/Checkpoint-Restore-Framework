@@ -6,5 +6,6 @@ const char *test_nvstore_alloc_simple();
 const char *test_nvstore_alloc_complex();
 const char *test_nvstore_checkpoint_simple();
 const char *test_nvstore_checkpoint_complex();
+const char *test_nvstore_checkpoint_without_shutdown();
 
 #endif

@@ -5,8 +5,12 @@
 #include "vtslist.h"
 #include "checkpoint.h"
 
+#include <stdbool.h>
+
+#include <semaphore.h>
 #include <pthread.h>
 #include <setjmp.h>
+#include <ucontext.h>
 #include <limits.h>
 
 #include <unistd.h>
@@ -37,6 +41,7 @@ struct crthread
     /* transient fields - values must be restored after a crash with syscalls */
     /* ---------------------------------------------------------------------- */
     pthread_t ptid;                 /* the original thread ID variable        */
+    sem_t *userjoin;                /* User should use this over pthread_join */
     struct vtslist_elem vtselem;    /* used for insertions into vthreadtable  */
     struct checkpoint *checkpoint;  /* checkpoint object for committing self  */
 };
@@ -99,5 +104,10 @@ void *crthread_join(struct crthread *thread);
  */
 void crthread_checkpoint();
 
+/**
+ * Restores a thread which has been checkpointed by performing a longjmp to the
+ * appropriate location in the thread's saved stack.
+ */
+void crthread_restore(struct crthread *thread, bool from_file);
 
 #endif

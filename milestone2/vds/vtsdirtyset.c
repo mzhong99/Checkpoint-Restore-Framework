@@ -140,6 +140,29 @@ struct vtsdirtyset *vtsdirtyset_new()
     return set;
 }
 
+/** Copies a dirty set which must be also be freed using vtsdirtyset_delete() */
+struct vtsdirtyset *vtsdirtyset_copy(struct vtsdirtyset *base)
+{
+    struct vtsdirtyaddr *entry;
+    struct list_elem *elem;
+
+    struct vtsdirtyset *copy = vtsdirtyset_new();
+
+    pthread_mutex_lock(&base->lock);
+
+    elem = list_begin(&base->iterlist);
+    while (elem != list_end(&base->iterlist))
+    {
+        entry = container_of(elem, struct vtsdirtyaddr, iter);
+        vtsdirtyset_insert(copy, entry->ptr);
+        elem = list_next(elem);
+    }
+
+    pthread_mutex_unlock(&base->lock);
+    
+    return copy;
+}
+
 /** Destroys a created dirty address set */
 void vtsdirtyset_delete(struct vtsdirtyset *set)
 {

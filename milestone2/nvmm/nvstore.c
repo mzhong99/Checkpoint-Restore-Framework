@@ -556,15 +556,21 @@ void nvstore_checkpoint_everything()
     void *addr;
     struct vblock *block;
 
+    struct vtsdirtyset *dirtycopy;
+    
+    dirtycopy = vtsdirtyset_copy(self->dirty);
+
     nvmetadata_lock(self->meta);
 
-    while ((addr = vtsdirtyset_remove_any(self->dirty)) != NULL)
+    while ((addr = vtsdirtyset_remove_any(dirtycopy)) != NULL)
     {
         block = vtsaddrtable_find(self->table, addr);
         vblock_dumpbypage(block, self->nvfs, addr);
     }
 
     nvmetadata_unlock(self->meta);
+
+    vtsdirtyset_delete(dirtycopy);
 }
 
 void nvstore_submit_checkpoint(struct checkpoint *checkpoint)

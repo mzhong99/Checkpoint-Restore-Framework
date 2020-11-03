@@ -34,6 +34,7 @@ struct vtsdirtyset
 };
 
 struct vtsdirtyset *vtsdirtyset_new();
+struct vtsdirtyset *vtsdirtyset_copy(struct vtsdirtyset *base);
 void vtsdirtyset_delete(struct vtsdirtyset *set);
 
 void vtsdirtyset_insert(struct vtsdirtyset *set, void *addr);

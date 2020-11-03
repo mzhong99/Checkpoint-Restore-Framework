@@ -5,6 +5,8 @@
 #include <sys/mman.h>
 
 #include <assert.h>
+#include <alloca.h>
+#include <string.h>
 
 #include <stddef.h>
 #include <stdio.h>
@@ -86,9 +88,11 @@ void vblock_dumptofile(struct vblock *block, FILE *file)
 void vblock_dumpbypage(struct vblock *block, FILE *file, void *addr)
 {
     off_t pgoffset, nwrite;
-    void *pgstart;
+    void *pgstart, *pgcpy;
 
     pgstart = (void *)((uintptr_t)addr & ~(sysconf(_SC_PAGE_SIZE) - 1));
+    pgcpy = alloca(sysconf(_SC_PAGE_SIZE));
+    memcpy(pgcpy, pgstart, sysconf(_SC_PAGE_SIZE));
 
     pgoffset = vblock_pgoffset(block, pgstart);
     fseek(file, pgoffset, SEEK_SET);
@@ -96,4 +100,5 @@ void vblock_dumpbypage(struct vblock *block, FILE *file, void *addr)
     assert(nwrite == sysconf(_SC_PAGE_SIZE));
 
     madvise(pgstart, sysconf(_SC_PAGE_SIZE), MADV_DONTNEED);
+    memcpy(pgstart, pgcpy, sysconf(_SC_PAGE_SIZE));
 }

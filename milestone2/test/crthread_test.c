@@ -9,7 +9,9 @@
 const char *test_crthread_basic()
 {
     struct crthread *thread;
-    intptr_t result;
+    intptr_t result, reference;
+
+    reference = (intptr_t)fibonacci_tf_serial((void *)9);
 
     crheap_init("test_crthread_basic.heap");
 
@@ -20,7 +22,7 @@ const char *test_crthread_basic()
 
     crheap_shutdown();
 
-    if (result != 34)
+    if (result != reference)
         return "Fibonacci result was not correct.";
     return NULL;
 }
