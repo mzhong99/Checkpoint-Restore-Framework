@@ -30,7 +30,7 @@ static void *consumer(void *vtslist_vp)
         if (tester->value != i)
             return "Contents did not match (queue).";
 
-        mc_free(tester);
+        mcfree(tester);
     }
 
     return NULL;
@@ -50,7 +50,7 @@ const char *test_vtslist_message_passing()
 
     for (i = 0; i < VTSLIST_TEST_RANGE; i++)
     {
-        tester = mc_malloc(sizeof(*tester));
+        tester = mcmalloc(sizeof(*tester));
         tester->value = i;
         vtslist_push_back(&vtslist, &tester->vtselem);
     }

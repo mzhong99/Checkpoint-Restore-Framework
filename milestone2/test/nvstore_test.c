@@ -35,7 +35,7 @@ const char *test_nvstore_alloc_simple()
         return "Initialization failed.";
 
     data = nvstore_allocpage(SMALL_NUM_PAGES);
-    refdata = mc_malloc(sysconf(_SC_PAGE_SIZE) * SMALL_NUM_PAGES);
+    refdata = mcmalloc(sysconf(_SC_PAGE_SIZE) * SMALL_NUM_PAGES);
 
     for (i = 0; i < sysconf(_SC_PAGE_SIZE); i++)
     {
@@ -51,7 +51,7 @@ const char *test_nvstore_alloc_simple()
     if (rc != 0)
         return "Shutdown failed.";
 
-    mc_free(refdata);
+    mcfree(refdata);
     return NULL;
 }
 
@@ -66,7 +66,7 @@ const char *test_nvstore_alloc_complex()
 
     for (i = 0; i < LARGE_NUM_PAGES; i++)
     {
-        refdata = mc_malloc(sysconf(_SC_PAGE_SIZE) * (i + 1));
+        refdata = mcmalloc(sysconf(_SC_PAGE_SIZE) * (i + 1));
         data = nvstore_allocpage(i + 1);
 
         for (j = 0; j < sysconf(_SC_PAGE_SIZE) * (i + 1); j++)
@@ -79,7 +79,7 @@ const char *test_nvstore_alloc_complex()
             if (data[j] != refdata[j])
                 return "Data contents do not match";
 
-        mc_free(refdata);
+        mcfree(refdata);
     }
 
     rc = nvstore_shutdown();
@@ -98,7 +98,7 @@ const char *test_nvstore_checkpoint_simple()
     if (rc != 0)
         return "First initialization failed.";
 
-    refdata = mc_malloc(sysconf(_SC_PAGE_SIZE));
+    refdata = mcmalloc(sysconf(_SC_PAGE_SIZE));
     data = nvstore_allocpage(1);
     
     for (i = 0; i < sysconf(_SC_PAGE_SIZE); i++)
@@ -129,7 +129,7 @@ const char *test_nvstore_checkpoint_simple()
     if (rc != 0)
         return "Second shutdown failed.";
 
-    mc_free(refdata);
+    mcfree(refdata);
     return NULL;
 }
 
@@ -144,7 +144,7 @@ const char *test_nvstore_checkpoint_complex()
         if (rc != 0)
             return "First initialization failed.";
 
-        refdatamany[i] = mc_malloc((i + 1) * sysconf(_SC_PAGE_SIZE));
+        refdatamany[i] = mcmalloc((i + 1) * sysconf(_SC_PAGE_SIZE));
         datamany[i] = nvstore_allocpage(i + 1);
 
         for (j = 0; j <= i; j++)
@@ -182,7 +182,7 @@ const char *test_nvstore_checkpoint_complex()
     }
 
     for (i = 0; i < LARGE_NUM_PAGES; i++)
-        mc_free(refdatamany[i]);
+        mcfree(refdatamany[i]);
 
     return NULL;
 }
@@ -198,7 +198,7 @@ const char *test_nvstore_checkpoint_without_shutdown()
         if (rc != 0)
             return "First initialization failed.";
 
-        refdatamany[i] = mc_malloc((i + 1) * sysconf(_SC_PAGE_SIZE));
+        refdatamany[i] = mcmalloc((i + 1) * sysconf(_SC_PAGE_SIZE));
         datamany[i] = nvstore_allocpage(i + 1);
 
         for (j = 0; j <= i; j++)
@@ -250,7 +250,7 @@ const char *test_nvstore_checkpoint_without_shutdown()
     }
 
     for (i = 0; i < LARGE_NUM_PAGES; i++)
-        mc_free(refdatamany[i]);
+        mcfree(refdatamany[i]);
 
     return NULL;
 }

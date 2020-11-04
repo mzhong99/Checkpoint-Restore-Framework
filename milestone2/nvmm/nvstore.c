@@ -340,7 +340,7 @@ static int nvstore_initnvfs(const char *filename)
 static int nvstore_initmmap()
 {
     /* initialization of the empty page to be loaded in */
-    self->tmppage = mc_mmap(NULL, sysconf(_SC_PAGE_SIZE), 
+    self->tmppage = mcmmap(NULL, sysconf(_SC_PAGE_SIZE), 
                             PROT_READ | PROT_WRITE | PROT_EXEC, 
                             MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 
@@ -529,7 +529,7 @@ int nvstore_shutdown()
     vtsdirtyset_delete(self->dirty);
     vtsaddrtable_delete(self->table);
 
-    if (mc_munmap(self->tmppage, sysconf(_SC_PAGE_SIZE)) != 0)
+    if (mcmunmap(self->tmppage, sysconf(_SC_PAGE_SIZE)) != 0)
         return E_MMAP;
     
     pthread_mutex_destroy(&self->meta->mutexlock);

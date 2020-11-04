@@ -27,7 +27,7 @@ static struct vtsdirtyaddr *__vtsdirtyaddr_new(void *key)
 {
     struct vtsdirtyaddr *entry;
     
-    entry = mc_malloc(sizeof(*entry));
+    entry = mcmalloc(sizeof(*entry));
     entry->ptr = key;
     
     return entry;
@@ -36,7 +36,7 @@ static struct vtsdirtyaddr *__vtsdirtyaddr_new(void *key)
 /** Deletes the entry. The entry should NOT be in any lists before deletion.  */
 static void __vtsdirtyaddr_delete(struct vtsdirtyaddr *entry)
 {
-    mc_free(entry);
+    mcfree(entry);
 }
 
 /** Finds an entry (unsafely) corresponding to the address provided.          */
@@ -129,7 +129,7 @@ struct vtsdirtyset *vtsdirtyset_new()
     struct vtsdirtyset *set;
     size_t i;
 
-    set = mc_malloc(sizeof(*set));
+    set = mcmalloc(sizeof(*set));
 
     pthread_mutex_init(&set->lock, NULL);
     list_init(&set->iterlist);
@@ -181,7 +181,7 @@ void vtsdirtyset_delete(struct vtsdirtyset *set)
     pthread_mutex_unlock(&set->lock);
 
     pthread_mutex_destroy(&set->lock);
-    mc_free(set);
+    mcfree(set);
 }
 
 /** Inserts the new address into the set */

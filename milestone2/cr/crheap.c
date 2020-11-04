@@ -47,6 +47,15 @@ int crheap_shutdown()
     return 0;
 }
 
+int crheap_shutdown_nosave()
+{
+    nvmetadata_checkpoint(nvmetadata_instance());
+    crthread_shutdown_system();
+    nvstore_shutdown();
+
+    return 0;
+}
+
 int crheap_checkpoint_everything()
 {
     nvstore_checkpoint_everything();

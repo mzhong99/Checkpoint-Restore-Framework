@@ -16,14 +16,14 @@ struct vblock *vblock_new(void *pgaddr, size_t npages, off_t offset)
     struct vblock *block = NULL;
 
     assert(npages > 0);
-    block = mc_malloc(sizeof(*block));
+    block = mcmalloc(sizeof(*block));
 
     block->offset = offset;
     block->offset_pgstart = block->offset 
         + sizeof(block->pgstart) + sizeof(block->npages);
 
     block->npages = npages;
-    block->pgstart = mc_mmap(pgaddr, npages * sysconf(_SC_PAGE_SIZE), 
+    block->pgstart = mcmmap(pgaddr, npages * sysconf(_SC_PAGE_SIZE), 
                              PROT_READ | PROT_WRITE | PROT_EXEC, 
                              MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 
@@ -39,8 +39,8 @@ struct vblock *vblock_new(void *pgaddr, size_t npages, off_t offset)
 
 void vblock_delete(struct vblock *block)
 {
-    mc_munmap(block->pgstart, block->npages * sysconf(_SC_PAGE_SIZE));
-    mc_free(block);
+    mcmunmap(block->pgstart, block->npages * sysconf(_SC_PAGE_SIZE));
+    mcfree(block);
 }
 
 off_t vblock_nvfsize(struct vblock *block)

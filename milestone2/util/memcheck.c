@@ -142,7 +142,7 @@ static void mc_table_insert(struct mc_node *node)
 /******************************************************************************/
 /** Public-Facing API ------------------------------------------------------- */
 /******************************************************************************/
-void *mc_malloc(size_t size)
+void *mcmalloc(size_t size)
 {
     struct mc_node *node;
     void *ptr;
@@ -164,7 +164,7 @@ void *mc_malloc(size_t size)
     return ptr;
 }
 
-void *mc_calloc(size_t nmemb, size_t size)
+void *mccalloc(size_t nmemb, size_t size)
 {
     struct mc_node *node;
     void *ptr;
@@ -186,14 +186,14 @@ void *mc_calloc(size_t nmemb, size_t size)
     return ptr;
 }
 
-void *mc_realloc(void *ptr, size_t size)
+void *mcrealloc(void *ptr, size_t size)
 {
     struct mc_node *node;
     void *rptr;
 
     if (size == 0)
     {
-        mc_free(ptr);
+        mcfree(ptr);
         return NULL;
     }
 
@@ -212,7 +212,7 @@ void *mc_realloc(void *ptr, size_t size)
     return rptr;
 }
 
-void mc_free(void *ptr)
+void mcfree(void *ptr)
 {
     bool worked; 
 
@@ -225,7 +225,7 @@ void mc_free(void *ptr)
 
     if (!worked)
     {
-        printf("Attempted to mc_free() unregistered address %p\n", ptr);
+        printf("Attempted to mcfree() unregistered address %p\n", ptr);
         abort();
     }
 
@@ -234,7 +234,7 @@ void mc_free(void *ptr)
     pthread_mutex_unlock(&self->lock);
 }
 
-void *mc_mmap(void *addr, size_t len, int prot, int flags, int fd, off_t off)
+void *mcmmap(void *addr, size_t len, int prot, int flags, int fd, off_t off)
 {
     struct mc_node *node;
     void *ptr;
@@ -257,7 +257,7 @@ void *mc_mmap(void *addr, size_t len, int prot, int flags, int fd, off_t off)
     return ptr;
 }
 
-int mc_munmap(void *addr, size_t len)
+int mcmunmap(void *addr, size_t len)
 {
     int rc;
 
@@ -271,7 +271,7 @@ int mc_munmap(void *addr, size_t len)
     return rc;
 }
 
-void mc_report()
+void mcreport()
 {
     struct mc_node *chain;
     size_t i;

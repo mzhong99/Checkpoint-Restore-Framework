@@ -3,7 +3,10 @@
 #include "nvstore.h"
 #include "vtsthreadtable.h"
 #include "resurrector.h"
+#include "contextswitch.h"
 
+#include <stdio.h>
+#include <stdlib.h>
 #include <assert.h>
 
 /******************************************************************************/
@@ -12,6 +15,9 @@
 
 /** Used as a wrapper for restoration hook on subsequent runs */
 static void *crthread_taskfunc(void *thread_vp);
+
+/* Used to force the thread to descend in its stack before exiting */
+static void crthread_descend_and_exit(void *addr);
 
 /******************************************************************************/
 /** Private Implementation -------------------------------------------------- */
@@ -38,9 +44,9 @@ static void *crthread_taskfunc(void *crthread_vp)
         thread->firstrun = false;
 
         /* Checkpoint BEFORE and AFTER thread execution. */
-        crthread_checkpoint();
+        // crthread_checkpoint();
         thread->retval = thread->taskfunc(thread->arg);
-        crthread_checkpoint();
+        // crthread_checkpoint();
     }
     else
     {
@@ -48,7 +54,7 @@ static void *crthread_taskfunc(void *crthread_vp)
          * and then jump directly to continue exeuction. */
 
         /* TODO: use mprotect() to handle execution permissions. */
-        setcontext(&thread->env);
+        load_context(&thread->env);
     }
 
     /* Destruction of Transient Fields                                        */
@@ -68,6 +74,14 @@ static void *crthread_taskfunc(void *crthread_vp)
 
     /* Function should never reach this point. */
     assert(NULL);
+}
+
+static void crthread_descend_and_exit(void *addr)
+{
+    if (labs((intptr_t)addr - (intptr_t)&addr) < sysconf(_SC_PAGE_SIZE))
+        crthread_descend_and_exit(addr);
+    else
+        pthread_exit(NULL);
 }
 
 /******************************************************************************/
@@ -124,12 +138,11 @@ struct crthread *crthread_new(void *(*taskfunc) (void *), size_t stacksize)
 
     /* Semaphore is initialized outside of task function so that main thread can
      * join with this crthread. */
-    crthread->userjoin = mc_malloc(sizeof(*crthread->userjoin));
+    crthread->userjoin = mcmalloc(sizeof(*crthread->userjoin));
     sem_init(crthread->userjoin, 0, 0);
 
     crthread->taskfunc = taskfunc;
 
-    crthread->from_restore = false;
     crthread->firstrun = true;
     crthread->ptid = -1;
 
@@ -153,7 +166,7 @@ void crthread_delete(struct crthread *crthread)
     pthread_mutex_unlock(&meta->threadlock);
 
     sem_destroy(crthread->userjoin);
-    mc_free(crthread->userjoin);
+    mcfree(crthread->userjoin);
     crfree(crthread->stack);
     crfree(crthread);
 }
@@ -200,25 +213,30 @@ void *crthread_join(struct crthread *thread)
  */
 void crthread_checkpoint()
 {
-    struct crthread *thread = NULL;
+    struct crthread *volatile thread = NULL;
+    struct crcontext *volatile context;
+
     pthread_t ptid;
+    void *stackvar;
 
     ptid = pthread_self();
     thread = vtsthreadtable_find(ptid);
 
     assert(thread != NULL);
-    thread->from_restore = false;
+    context = (struct crcontext *volatile)&thread->env;
 
     /* Set a marker to which to jump. Then, submit this thread to the 
      * resurrector and exit for restoration. */
-    getcontext(&thread->env);
-    if (thread->from_restore)
+    if (save_context(context) == 0)
     {
+        display_context(context);
         resurrector_checkpoint(thread);
-        pthread_exit(NULL);
+
+        /* need to kill thread here */
+        crthread_descend_and_exit(&stackvar);
     }
 
-    thread->from_restore = false;
+    display_context(context);
 }
 
 void crthread_restore(struct crthread *thread, bool from_file)
@@ -231,11 +249,9 @@ void crthread_restore(struct crthread *thread, bool from_file)
 
     if (from_file)
     {
-        thread->userjoin = mc_malloc(sizeof(*thread->userjoin));
+        thread->userjoin = mcmalloc(sizeof(*thread->userjoin));
         sem_init(thread->userjoin, 0, 0);
     }
-
-    thread->from_restore = true;
 
     pthread_create(&thread->ptid, &attrs, crthread_taskfunc, thread);
     pthread_attr_destroy(&attrs);

@@ -11,6 +11,7 @@
 #include "memcheck_test.h"
 #include "crmalloc_test.h"
 #include "crthread_test.h"
+#include "checkpoint_test.h"
 
 /**
  * Usually, I try to keep a strict line limit of 80 characters. This is the only
@@ -53,10 +54,10 @@ void run_all_tests()
     /**************************************************************************/
     /** Tests: memcheck ----------------------------------------------------- */
     /**************************************************************************/
-    run_test(test_memcheck_malloc_simple, "memcheck", "Basic mc_malloc() usage");
-    run_test(test_memcheck_malloc_complex, "memcheck", "Complex mc_malloc() usage");
-    run_test(test_memcheck_mmap_simple, "memcheck", "mc_mmap() and mc_munmap() usage");
-    run_test(test_memcheck_complex, "memcheck", "Allocations with mc_malloc() and mc_mmap()");
+    run_test(test_memcheck_malloc_simple, "memcheck", "Basic mcmalloc() usage");
+    run_test(test_memcheck_malloc_complex, "memcheck", "Complex mcmalloc() usage");
+    run_test(test_memcheck_mmap_simple, "memcheck", "mcmmap() and mcmunmap() usage");
+    run_test(test_memcheck_complex, "memcheck", "Allocations with mcmalloc() and mcmmap()");
 
     /**************************************************************************/
     /** Tests: crmalloc ----------------------------------------------------- */
@@ -72,11 +73,18 @@ void run_all_tests()
     run_test(test_vtslist_message_passing, "vtslist", "Thread-safe message passing");
 
     /**************************************************************************/
+    /** Tests: checkpoint --------------------------------------------------- */
+    /**************************************************************************/
+    run_test(test_checkpoint_basic, "checkpoint", "Basic sequential checkpointing capacity");
+    run_test(test_checkpoint_stack, "checkpoint", "Tests the ability to checkpoint a thread's stack");
+
+    /**************************************************************************/
     /** Tests: crthread ----------------------------------------------------- */
     /**************************************************************************/
     run_test(test_crthread_basic, "crthread", "Basic crthread test");
 
-    mc_report();
+
+    mcreport();
 }
 
 int main()

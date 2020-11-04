@@ -54,13 +54,13 @@ static void __vtsaddrtable_expand(struct vtsaddrtable *table)
     oldcap = table->cap;
 
     table->cap <<= 1;
-    table->entries = mc_calloc(table->cap, sizeof(*table->entries));
+    table->entries = mccalloc(table->cap, sizeof(*table->entries));
 
     for (i = 0; i < oldcap; i++)
         if (oldentries[i].value != NULL)
             __vtsaddrtable_insert(table, oldentries[i].value);
 
-    mc_free(oldentries);
+    mcfree(oldentries);
 }
 
 /** 
@@ -93,12 +93,12 @@ static void __vtsaddrtable_insert(struct vtsaddrtable *table, struct vblock *blo
 /******************************************************************************/
 struct vtsaddrtable *vtsaddrtable_new(size_t power)
 {
-    struct vtsaddrtable *table = mc_malloc(sizeof(*table));
+    struct vtsaddrtable *table = mcmalloc(sizeof(*table));
 
     table->nelem = 0;
     table->cap = 1 << power;
 
-    table->entries = mc_calloc(table->cap, sizeof(*table->entries));
+    table->entries = mccalloc(table->cap, sizeof(*table->entries));
     pthread_rwlock_init(&table->lock, NULL);
 
     return table;
@@ -108,8 +108,8 @@ void vtsaddrtable_delete(struct vtsaddrtable *table)
 {
     pthread_rwlock_destroy(&table->lock);
 
-    mc_free(table->entries);
-    mc_free(table);
+    mcfree(table->entries);
+    mcfree(table);
 }
 
 void vtsaddrtable_insert(struct vtsaddrtable *table, struct vblock *block)

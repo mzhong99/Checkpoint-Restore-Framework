@@ -4,12 +4,12 @@
 #include "list.h"
 #include "vtslist.h"
 #include "checkpoint.h"
+#include "contextswitch.h" 
 
 #include <stdbool.h>
 
 #include <semaphore.h>
 #include <pthread.h>
-#include <ucontext.h>
 #include <limits.h>
 
 #include <unistd.h>
@@ -24,8 +24,7 @@ struct crthread
     /* overhead variables for checkpoint-restore system                       */
     /* ---------------------------------------------------------------------- */
     struct list_elem elem;          /* used for insertions into threadlist    */
-    ucontext_t env;                 /* save for checkpoint using getcontext   */
-    volatile bool from_restore;     /* used to knows where setcontext is from */
+    volatile struct crcontext env;  /* return context (for restoration)       */
     bool firstrun;                  /* skip restoration on first run          */
     bool inprogress;                /* restore if execution was in progress   */
 

@@ -58,6 +58,8 @@ int crheap_init(const char *filename);
  */
 int crheap_shutdown();
 
+int crheap_shutdown_nosave();
+
 /** The classic printf() function, without the embedded dynamic allocation. */
 int crprintf(const char * __restrict fmt, ...);
 

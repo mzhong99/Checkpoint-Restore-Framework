@@ -88,7 +88,7 @@ static void *resurrector_taskfunc(__attribute__((unused))void *arg)
                 abort();
         }
 
-        mc_free(msg);
+        mcfree(msg);
     }
 
     return NULL;
@@ -107,7 +107,7 @@ void resurrector_shutdown()
 {
     struct resurrector_msg *msg;
 
-    msg = mc_malloc(sizeof(*msg));
+    msg = mcmalloc(sizeof(*msg));
     msg->cmd = RESURRECTOR_SHUTDOWN;
     vtslist_push_back(&self->input, &msg->vtselem);
 
@@ -119,7 +119,7 @@ void resurrector_checkpoint(struct crthread *thread)
 {
     struct resurrector_msg *msg;
 
-    msg = mc_malloc(sizeof(*msg));
+    msg = mcmalloc(sizeof(*msg));
 
     msg->cmd = RESURRECTOR_CHECKPOINT;
     msg->thread = thread;

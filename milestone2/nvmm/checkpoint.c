@@ -11,7 +11,7 @@ struct checkpoint *checkpoint_new()
 {
     struct checkpoint *checkpoint;
 
-    checkpoint = mc_malloc(sizeof(*checkpoint));
+    checkpoint = mcmalloc(sizeof(*checkpoint));
     checkpoint->addrs = vaddrlist_new(NVADDRLIST_INIT_POWER);
 
     checkpoint->is_kill_message = false;
@@ -24,7 +24,7 @@ struct checkpoint *checkpoint_new()
 void checkpoint_delete(struct checkpoint *checkpoint)
 {
     vaddrlist_delete(checkpoint->addrs);
-    mc_free(checkpoint);
+    mcfree(checkpoint);
 }
 
 /** Adds a region to be checkpointed. Specifically adds pages for the region. */

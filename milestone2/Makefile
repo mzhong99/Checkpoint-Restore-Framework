@@ -1,10 +1,13 @@
 PROJDIR = .
 
 SRC_CFILES = $(shell find $(PROJDIR) -type f -name "*.c")
+SRC_ASMFILES = $(shell find $(PROJDIR) -type f -name "*.S")
 SRC_HFILES = $(shell find $(PROJDIR) -type f -name "*.h")
 SRC_SUBDIRS = $(shell find $(PROJDIR) -type d)
 
 OBJ_CFILES = $(patsubst %.c, %.o, $(SRC_CFILES))
+OBJ_ASMFILES = $(patsubst %.S, %.o, $(SRC_ASMFILES))
+
 GCOV_CFILES = $(patsubst %.c, %.c.gcov, $(SRC_CFILES))
 GCDA_CFILES = $(patsubst %.c, %.gcda, $(SRC_CFILES))
 GCNO_CFILES = $(patsubst %.c, %.gcno, $(SRC_CFILES))
@@ -13,12 +16,13 @@ DEFAULT_NVFILE = "heapfile.heap"
 
 DEL = rm -f
 CC = gcc
+AS = gcc
 
 COVERAGE_INFO = coverage.info
 COVERAGE_DIR = coverage
 
 DEBUG_FLAGS = -coverage -ggdb3 -O0 
-DISABLED_FLAGS = -fno-optimize-sibling-calls -fno-stack-check 
+DISABLED_FLAGS = -fno-optimize-sibling-calls -fno-stack-protector
 
 WARN_FLAGS = -Wall -Wextra
 
@@ -36,7 +40,7 @@ run: all
 	./$(EXE)
 
 commit: clean
-	git add $(SRC_CFILES) $(SRC_HFILES) Makefile notes.txt
+	git add $(SRC_CFILES) $(SRC_HFILES) $(SRC_ASMFILES) Makefile notes.txt
 	git commit
 
 push:
@@ -48,10 +52,14 @@ memtest: all
 debug: all
 	gdb ./$(EXE)
 
-$(EXE): $(OBJ_CFILES)
+$(EXE): $(OBJ_CFILES) $(OBJ_ASMFILES)
 	@echo "[LINK] $(EXE)"
-	@$(CC) $(CFLAGS) $(LFLAGS) $(IFLAGS) $(OBJ_CFILES) -o $(EXE)
+	@$(CC) $(CFLAGS) $(LFLAGS) $(IFLAGS) $(OBJ_CFILES) $(OBJ_ASMFILES) -o $(EXE)
 	@echo "[BUILD] completed."
+
+%.o: %.S
+	@echo "[AS] $<"
+	@$(AS) $(CFLAGS) $(IFLAGS) -c $< -o $@
 
 %.o: %.c
 	@echo "[CC] $<"
@@ -71,7 +79,7 @@ ctags:
 
 clean:
 	@echo "[DEL] OBJ files (*.o)"
-	@$(DEL) $(OBJ_CFILES) 
+	@$(DEL) $(OBJ_CFILES) $(OBJ_ASMFILES)
 	
 	@echo "[DEL] EXE files ($(EXE), *.heap, vgcore*)"
 	@$(DEL) $(EXE) $(DEFAULT_NVFILE) vgcore* *.heap 
