@@ -2,6 +2,6 @@
 #define __CHECKPOINT_TEST_H__
 
 const char *test_checkpoint_basic();
-const char *test_checkpoint_stack();
+const char *test_checkpoint_stack_variables();
 
 #endif

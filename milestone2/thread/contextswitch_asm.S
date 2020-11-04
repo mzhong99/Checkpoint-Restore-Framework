@@ -60,22 +60,17 @@ save_context:
 #   
 # Assembly Equivalent:
 #   retval  ->  %rax
-#   context ->  %rdi
+#   context ->  %rdi (contains a pointer to the context)
 # 
-# Local Variable Mapping:
-#   rbp - 0x08      struct crcontext *context
+# This function CANNOT EVER create a new stack frame, since we wish NOT to smash
+# the state of the stack in higher addresses.
 load_context:
-    push %rbp                   # Save old stackframe
-    mov  %rsp,%rbp              # Create base for new stackframe
-    mov  %rdi,-0x8(%rbp)        # Save a pointer to the context on the stack
 
-    mov  -0x08(%rbp),%rbx       # Load output pointer location into rbx
-
-    mov  0x08(%rbx),%rsp        # Restore the old stack pointer
-    mov  0x10(%rbx),%rbp        # Restore the old stack base pointer
+    mov  0x08(%rdi),%rsp        # Restore the old stack pointer
+    mov  0x10(%rdi),%rbp        # Restore the old stack base pointer
 
     mov  $0x1,%rax              # Upon restoring the current context, return
                                 # value should be one (DIFFERENT FROM SAVE)
 
-    jmp  *(%rbx)                # Finally, overwrite the PC. This function no
+    jmp  *(%rdi)                # Finally, overwrite the PC. This function no
                                 # longer returns and instead terminates here.

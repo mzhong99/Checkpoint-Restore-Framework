@@ -76,12 +76,12 @@ void run_all_tests()
     /** Tests: checkpoint --------------------------------------------------- */
     /**************************************************************************/
     run_test(test_checkpoint_basic, "checkpoint", "Basic sequential checkpointing capacity");
-    run_test(test_checkpoint_stack, "checkpoint", "Tests the ability to checkpoint a thread's stack");
+    run_test(test_checkpoint_stack_variables, "checkpoint", "Tests checkpointing a thread's stack variables");
 
     /**************************************************************************/
     /** Tests: crthread ----------------------------------------------------- */
     /**************************************************************************/
-    run_test(test_crthread_basic, "crthread", "Basic crthread test");
+    // run_test(test_crthread_basic, "crthread", "Basic crthread test");
 
 
     mcreport();
