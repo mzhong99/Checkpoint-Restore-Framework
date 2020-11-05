@@ -81,7 +81,7 @@ void run_all_tests()
     /**************************************************************************/
     /** Tests: crthread ----------------------------------------------------- */
     /**************************************************************************/
-    // run_test(test_crthread_basic, "crthread", "Basic crthread test");
+    run_test(test_crthread_basic, "crthread", "Basic crthread test");
 
 
     mcreport();

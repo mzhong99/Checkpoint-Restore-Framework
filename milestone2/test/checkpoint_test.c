@@ -11,6 +11,7 @@
 
 #include <pthread.h>
 #include <unistd.h>
+#include <limits.h>
 
 #define TEST_SIZE           20000
 #define THREAD_STACKSIZE    1048576
@@ -74,7 +75,7 @@ static void __attribute__((unused)) pthread_descend_and_exit(void *retval)
 
     descension = (long)((intptr_t)retval - (intptr_t)&retval);
     printf("%ld\n", descension);
-    if (descension < 16 * sysconf(_SC_PAGE_SIZE))
+    if (descension < PTHREAD_STACK_MIN)
         pthread_descend_and_exit(retval);
     else
         pthread_exit(retval);

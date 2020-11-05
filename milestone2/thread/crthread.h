@@ -24,18 +24,23 @@ struct crthread
     /* overhead variables for checkpoint-restore system                       */
     /* ---------------------------------------------------------------------- */
     struct list_elem elem;          /* used for insertions into threadlist    */
-    volatile struct crcontext env;  /* return context (for restoration)       */
-    bool firstrun;                  /* skip restoration on first run          */
+    volatile bool firstrun;         /* skip restoration on first run          */
     bool inprogress;                /* restore if execution was in progress   */
 
     /* normal thread variables                                                */
     /* ---------------------------------------------------------------------- */
-    void *stack;                                 /* crmalloc'd stack          */
-    uint8_t recoverystack[DEFAULT_STACKSIZE];    /* recovery stack to longjmp */
-    size_t stacksize;                            /* size of main stack        */
-    void *(*taskfunc) (void *);                  /* task function             */
-    void *arg;                                   /* the argument for thread   */
-    void *retval;                                /* result of execution       */
+    void *stack;                                /* crmalloc'd stack           */
+    uint8_t recoverystack[DEFAULT_STACKSIZE];   /* recovery stack to longjmp  */
+    size_t stacksize;                           /* size of main stack         */
+    void *(*taskfunc) (void *);                 /* task function              */
+    void *arg;                                  /* the argument for thread    */
+    void *retval;                               /* result of execution        */
+
+    /* execution contexts                                                     */
+    /* ---------------------------------------------------------------------- */
+    volatile struct crcontext restorepoint;     /* restoration context        */
+    volatile struct crcontext exitpoint;        /* jmp here when finished     */
+    volatile struct crcontext cpexitpoint;      /* jmp when checkpointing     */
 
     /* transient fields - values must be restored after a crash with syscalls */
     /* ---------------------------------------------------------------------- */

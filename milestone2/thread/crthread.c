@@ -14,17 +14,43 @@
 /******************************************************************************/
 
 /** Used as a wrapper for restoration hook on subsequent runs */
-static void *crthread_taskfunc(void *thread_vp);
+static void *crthread_stub(void *thread_vp);
 
-/* Used to force the thread to descend in its stack before exiting */
-static void crthread_descend_and_exit(void *addr);
+/** 
+ * Used to force the thread to descend in its stack before executing. The 
+ * [callstk] parameter MUST point to a variable on the same stack in which the
+ * thread is executing - i.e. the variable's pointer must be located in the
+ * memory region specified by [thread->stack].
+ */
+static void crthread_descend_and_run(struct crthread *thread, void *callstk);
 
 /******************************************************************************/
 /** Private Implementation -------------------------------------------------- */
 /******************************************************************************/
-static void *crthread_taskfunc(void *crthread_vp)
+
+static void crthread_descend_and_run(struct crthread *thread, void *callstk)
 {
-    struct crthread *thread = crthread_vp;
+    long descension;
+
+    /* First, recursively call if we're not far enough into the stack. */
+    descension = (long)((intptr_t)callstk - (intptr_t)&callstk);
+    if (descension < PTHREAD_STACK_MIN)
+        crthread_descend_and_run(thread, callstk);
+    else
+    {
+        /* TODO: Checkpoint BEFORE AND AFTER, KEEP CONTEXTS IN MIND */
+        crthread_checkpoint();
+        thread->retval = thread->taskfunc(thread->arg);
+        crthread_checkpoint();
+        load_context(&thread->exitpoint);
+    }
+    
+}
+
+static void *crthread_stub(void *crthread_vp)
+{
+    struct crthread *thread = crthread_vp;  /* Cast pointer to thread         */
+    void *callstk = &crthread_vp;           /* Need a pointer to a stack var. */
 
     /* Initialization of Transient Fields                                     */
     /* ---------------------------------------------------------------------- */
@@ -36,52 +62,49 @@ static void *crthread_taskfunc(void *crthread_vp)
     thread->checkpoint = checkpoint_new();
     checkpoint_add(thread->checkpoint, thread, sizeof(*thread));
     checkpoint_add(thread->checkpoint, thread->stack, thread->stacksize);
-    
+
+    /* EXIT POINT 1: 
+     * The thread exited normally. */
+    if (save_context(&thread->exitpoint) != 0)
+    {
+        /* Remove the thread from the volatile global thread table. */
+        vtsthreadtable_remove(thread->ptid);
+
+        /* Destroy thread checkpoint object. */
+        checkpoint_delete(thread->checkpoint);
+
+        /* Post to calling thread that execution is complete. */
+        sem_post(thread->userjoin);
+
+        /* Finally, exit for real. */
+        pthread_exit(NULL);
+    }
+
+    /* EXIT POINT 2:
+     * The thread exited prematurely to prepare for a checkpoint. */
+    if (save_context(&thread->cpexitpoint) != 0)
+    {
+        /* Simply exit for real. Do NOT post to userjoin and leave transient 
+         * fields alone. */
+        pthread_exit(NULL);
+    }
+
     if (thread->firstrun)
     {
-        /* If this is the thread's first execution, mark a starting checkpoint
-         * and then run the task function inside. */
         thread->firstrun = false;
 
-        /* Checkpoint BEFORE and AFTER thread execution. */
-        // crthread_checkpoint();
-        thread->retval = thread->taskfunc(thread->arg);
-        // crthread_checkpoint();
+        /* If this is the thread's first execution, recursively descend the 
+         * and then execute the thread's function */
+        crthread_descend_and_run(thread, callstk);
     }
     else
     {
-        /* Otherwise, allow execution privileges on the proper stack segment
-         * and then jump directly to continue exeuction. */
-
-        /* TODO: use mprotect() to handle execution permissions. */
-        load_context(&thread->env);
+        /* Otherwise, load the thread's restore point. */
+        load_context(&thread->restorepoint);
     }
 
-    /* Destruction of Transient Fields                                        */
-    /* ---------------------------------------------------------------------- */
-
-    /* Remove the thread from the volatile global thread table. */
-    vtsthreadtable_remove(thread->ptid);
-
-    /* Destroy thread checkpoint object. */
-    checkpoint_delete(thread->checkpoint);
-
-    /* Post to calling thread that execution is complete. */
-    sem_post(thread->userjoin);
-    
-    /* Exit this function manually. DO NOT RETURN, in case of recovery. */
-    pthread_exit(NULL);
-
     /* Function should never reach this point. */
-    assert(NULL);
-}
-
-static void crthread_descend_and_exit(void *addr)
-{
-    if (labs((intptr_t)addr - (intptr_t)&addr) < sysconf(_SC_PAGE_SIZE))
-        crthread_descend_and_exit(addr);
-    else
-        pthread_exit(NULL);
+    abort();
 }
 
 /******************************************************************************/
@@ -181,7 +204,7 @@ void crthread_fork(struct crthread *thread, void *arg)
     pthread_attr_setstack(&attrs, thread->stack, thread->stacksize);
     pthread_attr_setguardsize(&attrs, 0);
 
-    pthread_create(&thread->ptid, &attrs, crthread_taskfunc, thread);
+    pthread_create(&thread->ptid, &attrs, crthread_stub, thread);
     pthread_attr_destroy(&attrs);
 }
 
@@ -217,26 +240,25 @@ void crthread_checkpoint()
     struct crcontext *volatile context;
 
     pthread_t ptid;
-    void *stackvar;
 
     ptid = pthread_self();
     thread = vtsthreadtable_find(ptid);
 
     assert(thread != NULL);
-    context = (struct crcontext *volatile)&thread->env;
+    context = (struct crcontext *volatile)&thread->restorepoint;
 
     /* Set a marker to which to jump. Then, submit this thread to the 
      * resurrector and exit for restoration. */
     if (save_context(context) == 0)
     {
-        display_context(context);
+        // display_context(context);
         resurrector_checkpoint(thread);
 
-        /* need to kill thread here */
-        crthread_descend_and_exit(&stackvar);
+        /* Jump to thread's checkpoint exit location. */
+        load_context(&thread->cpexitpoint);
     }
 
-    display_context(context);
+    // display_context(context);
 }
 
 void crthread_restore(struct crthread *thread, bool from_file)
@@ -253,6 +275,6 @@ void crthread_restore(struct crthread *thread, bool from_file)
         sem_init(thread->userjoin, 0, 0);
     }
 
-    pthread_create(&thread->ptid, &attrs, crthread_taskfunc, thread);
+    pthread_create(&thread->ptid, &attrs, crthread_stub, thread);
     pthread_attr_destroy(&attrs);
 }
