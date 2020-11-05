@@ -33,8 +33,8 @@ struct crthread
     uint8_t recoverystack[DEFAULT_STACKSIZE];   /* recovery stack to longjmp  */
     size_t stacksize;                           /* size of main stack         */
     void *(*taskfunc) (void *);                 /* task function              */
-    void *arg;                                  /* the argument for thread    */
-    void *retval;                               /* result of execution        */
+    void *volatile arg;                         /* the argument for thread    */
+    void *volatile retval;                      /* result of execution        */
 
     /* execution contexts                                                     */
     /* ---------------------------------------------------------------------- */
@@ -72,7 +72,8 @@ void crthread_shutdown_system();
  * Constructs a new thread. Unlike the pthread library, creating a new thread
  * does not instantly fork off the new function to be executed concurrently.
  */
-struct crthread *crthread_new(void *(*taskfunc) (void *), size_t stacksize);
+struct crthread *crthread_new(void *(*taskfunc) (void *), 
+                              void *arg, size_t stacksize);
 
 /** 
  * Deletes a thread. The thread should already be joined before deletion. 
@@ -87,7 +88,7 @@ void crthread_delete(struct crthread *thread);
  * 
  * Users should call this function.
  */
-void crthread_fork(struct crthread *thread, void *arg);
+void crthread_fork(struct crthread *thread);
 
 /** 
  * Causes the calling thread to wait until the supplied thread has finished 

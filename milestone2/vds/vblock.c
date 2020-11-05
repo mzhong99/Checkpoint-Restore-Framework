@@ -98,6 +98,7 @@ void vblock_dumpbypage(struct vblock *block, FILE *file, void *addr)
     fseek(file, pgoffset, SEEK_SET);
     nwrite = fwrite(pgstart, 1, sysconf(_SC_PAGE_SIZE), file);
     assert(nwrite == sysconf(_SC_PAGE_SIZE));
+    fflush(file);
 
     madvise(pgstart, sysconf(_SC_PAGE_SIZE), MADV_DONTNEED);
     memcpy(pgstart, pgcpy, sysconf(_SC_PAGE_SIZE));

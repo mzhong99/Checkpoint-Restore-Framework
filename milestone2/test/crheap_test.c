@@ -10,8 +10,8 @@
 #include "nvstore_test.h"
 #include "memcheck_test.h"
 #include "crmalloc_test.h"
-#include "crthread_test.h"
 #include "checkpoint_test.h"
+#include "crthread_test.h"
 
 /**
  * Usually, I try to keep a strict line limit of 80 characters. This is the only
@@ -82,6 +82,7 @@ void run_all_tests()
     /** Tests: crthread ----------------------------------------------------- */
     /**************************************************************************/
     run_test(test_crthread_basic, "crthread", "Basic crthread test");
+    run_test(test_crthread_restore_graceful, "crthread", "Test to restore a single thread after crash.");
 
 
     mcreport();

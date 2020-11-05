@@ -32,6 +32,10 @@ static void crthread_descend_and_run(struct crthread *thread, void *callstk)
 {
     long descension;
 
+    void *volatile arg;
+    void *volatile retval;
+    void *(*volatile userfunc) (void *);
+
     /* First, recursively call if we're not far enough into the stack. */
     descension = (long)((intptr_t)callstk - (intptr_t)&callstk);
     if (descension < PTHREAD_STACK_MIN)
@@ -40,7 +44,13 @@ static void crthread_descend_and_run(struct crthread *thread, void *callstk)
     {
         /* TODO: Checkpoint BEFORE AND AFTER, KEEP CONTEXTS IN MIND */
         crthread_checkpoint();
-        thread->retval = thread->taskfunc(thread->arg);
+
+        arg = thread->arg;
+        userfunc = thread->taskfunc;
+
+        retval = userfunc(arg);
+        thread->retval = retval;
+
         crthread_checkpoint();
         load_context(&thread->exitpoint);
     }
@@ -129,8 +139,7 @@ void crthread_init_system()
     while (elem != list_end(&meta->threadlist))
     {
         thread = container_of(elem, struct crthread, elem);
-        if (thread->inprogress)
-            crthread_restore(thread, true);
+        crthread_restore(thread, true);
 
         elem = list_next(elem);
     }
@@ -140,11 +149,27 @@ void crthread_init_system()
 
 void crthread_shutdown_system()
 {
+    struct nvmetadata *meta;
+    struct list_elem *elem;
+    struct crthread *thread;
+
     vtsthreadtable_cleanup();
     resurrector_shutdown();
+
+    meta = nvmetadata_instance();
+
+    elem = list_begin(&meta->threadlist);
+    while (elem != list_end(&meta->threadlist))
+    {
+        thread = container_of(elem, struct crthread, elem);
+        sem_destroy(thread->userjoin);
+        mcfree(thread->userjoin);
+        elem = list_next(elem);
+    }
 }
 
-struct crthread *crthread_new(void *(*taskfunc) (void *), size_t stacksize)
+struct crthread *crthread_new(void *(*taskfunc) (void *), 
+                              void *arg, size_t stacksize)
 {
     struct crthread *crthread;
     struct nvmetadata *meta;
@@ -158,6 +183,7 @@ struct crthread *crthread_new(void *(*taskfunc) (void *), size_t stacksize)
         crthread->stacksize = stacksize & ~(sysconf(_SC_PAGE_SIZE) - 1);
 
     crthread->stack = crmalloc(crthread->stacksize);
+    crthread->arg = arg;
 
     /* Semaphore is initialized outside of task function so that main thread can
      * join with this crthread. */
@@ -194,11 +220,9 @@ void crthread_delete(struct crthread *crthread)
     crfree(crthread);
 }
 
-void crthread_fork(struct crthread *thread, void *arg)
+void crthread_fork(struct crthread *thread)
 {
     pthread_attr_t attrs;
-
-    thread->arg = arg;
 
     pthread_attr_init(&attrs);
     pthread_attr_setstack(&attrs, thread->stack, thread->stacksize);
@@ -213,7 +237,7 @@ void *crthread_join(struct crthread *thread)
     sem_wait(thread->userjoin);
     thread->inprogress = false;
 
-    return thread->retval;
+    return (void *)thread->retval;
 }
 
 /**
@@ -251,14 +275,12 @@ void crthread_checkpoint()
      * resurrector and exit for restoration. */
     if (save_context(context) == 0)
     {
-        // display_context(context);
+        /* First, submit this thread for checkpointing. */
         resurrector_checkpoint(thread);
 
-        /* Jump to thread's checkpoint exit location. */
+        /* Then, jump to thread's checkpoint exit location. */
         load_context(&thread->cpexitpoint);
     }
-
-    // display_context(context);
 }
 
 void crthread_restore(struct crthread *thread, bool from_file)
