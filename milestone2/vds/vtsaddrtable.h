@@ -5,7 +5,7 @@
 #include <stddef.h>
 #include "vblock.h"
 
-#define NVADDRTABLE_INIT_POWER  12
+#define NVADDRTABLE_INIT_POWER  14
 
 /**
  * A hash table used to map raw addresses to the blocks from which the pages 

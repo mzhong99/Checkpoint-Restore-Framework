@@ -30,6 +30,7 @@
 
 #include "macros.h"
 #include "crmalloc.h"
+#include "nvstore.h"
 
 /** 
  * Used to initialize the non-volatile heap system. This initializes any 
@@ -72,3 +73,4 @@ int crprintf(const char * __restrict fmt, ...);
  */
 int crheap_checkpoint_everything();
 
+enum nvexecstate crheap_get_last_progress();

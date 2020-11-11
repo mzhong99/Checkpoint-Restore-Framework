@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <pthread.h>
+#include <stdbool.h>
 
 #include "list.h"
 #include "crmalloc.h"
@@ -16,6 +17,8 @@
 #define E_PTHREAD       45
 #define E_WRITE         46
 #define E_CLOSE         47
+
+enum nvexecstate { NV_FIRSTRUN, NV_RESURRECTED, NV_COMPLETED };
 
 /**
  * Metadata stored in non-volatile storage. You can assume that members in this
@@ -39,7 +42,10 @@
  */
 struct nvmetadata
 {
-    uint32_t writelock; /* set to 0 when writing and reset to 1 when done */
+    uint32_t writelock;     /* set to 0 when writing and reset to 1 when done */
+
+    enum nvexecstate execstate;     /* "how far did you get last time"        */
+    
     struct memory_manager mm;       /* memory manager container               */
 
     pthread_mutex_t threadlock;     /* lock for thread handles container      */

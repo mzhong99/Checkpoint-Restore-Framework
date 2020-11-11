@@ -414,6 +414,8 @@ static void nvstore_initmeta()
         metablock = __nvstore_allocpage(1, NULL);
         self->meta = metablock->pgstart;
 
+        self->meta->execstate = NV_FIRSTRUN;
+
         /* upon first init, we initialize the lists and the writelock as well */
         nvmetadata_unlock(self->meta);
         mm_init(&self->meta->mm);
@@ -424,6 +426,10 @@ static void nvstore_initmeta()
     {
         /* continue to fetch new blocks until no new blocks exist in file */
         self->meta = metablock->pgstart;
+
+        if (self->meta->execstate != NV_COMPLETED)
+            self->meta->execstate = NV_RESURRECTED;
+
         while (nvstore_fetchnvfs() != NULL);
     }
 
@@ -547,7 +553,7 @@ int nvstore_shutdown()
         return E_CLOSE;
     if (close(self->killfd) == -1)
         return E_CLOSE;
-
+    
     return 0;
 }
 

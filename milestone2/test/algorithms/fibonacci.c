@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
-static int64_t fibonacci_recursive(int64_t n)
+int64_t fibonacci_recursive(int64_t n)
 {
     int64_t p1, p2;
 

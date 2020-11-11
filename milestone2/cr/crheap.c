@@ -40,8 +40,10 @@ int crheap_init(const char *filename)
 
 int crheap_shutdown()
 {
-    crheap_checkpoint_everything();
     crthread_shutdown_system();
+    nvmetadata_instance()->execstate = NV_COMPLETED;
+
+    crheap_checkpoint_everything();
     nvstore_shutdown();
 
     return 0;
@@ -49,8 +51,8 @@ int crheap_shutdown()
 
 int crheap_shutdown_nosave()
 {
-    nvmetadata_checkpoint(nvmetadata_instance());
     crthread_shutdown_system();
+    nvmetadata_checkpoint(nvmetadata_instance());
     nvstore_shutdown();
 
     return 0;
@@ -60,4 +62,9 @@ int crheap_checkpoint_everything()
 {
     nvstore_checkpoint_everything();
     return 0;
+}
+
+enum nvexecstate crheap_get_last_progress()
+{
+    return nvmetadata_instance()->execstate;
 }

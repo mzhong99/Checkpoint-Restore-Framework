@@ -163,7 +163,7 @@ void crthread_shutdown_system()
     {
         thread = container_of(elem, struct crthread, elem);
         sem_destroy(thread->userjoin);
-        mcfree(thread->userjoin);
+        mcmunmap(thread->userjoin, sysconf(_SC_PAGE_SIZE));
         elem = list_next(elem);
     }
 }
@@ -187,7 +187,9 @@ struct crthread *crthread_new(void *(*taskfunc) (void *),
 
     /* Semaphore is initialized outside of task function so that main thread can
      * join with this crthread. */
-    crthread->userjoin = mcmalloc(sizeof(*crthread->userjoin));
+    crthread->userjoin = mcmmap(NULL, sysconf(_SC_PAGE_SIZE), 
+                                PROT_READ | PROT_WRITE, 
+                                MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     sem_init(crthread->userjoin, 0, 0);
 
     crthread->taskfunc = taskfunc;
@@ -293,7 +295,9 @@ void crthread_restore(struct crthread *thread, bool from_file)
 
     if (from_file)
     {
-        thread->userjoin = mcmalloc(sizeof(*thread->userjoin));
+        thread->userjoin = mcmmap(NULL, sysconf(_SC_PAGE_SIZE), 
+                                  PROT_READ | PROT_WRITE, 
+                                  MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
         sem_init(thread->userjoin, 0, 0);
     }
 
