@@ -3,5 +3,6 @@
 
 void demo_primesieve();
 void demo_fibonacci();
+void demo_mergesort();
 
 #endif

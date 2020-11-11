@@ -3,10 +3,13 @@
 #include "crheap.h"
 
 #include "fibonacci.h"
+#include "mergesort.h"
 
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdint.h>
+
+#include <stdlib.h>
 
 #define SIEVE_LIMIT (65536 * 9)
 
@@ -101,6 +104,40 @@ void demo_fibonacci()
     }
 
     // crthread_join(thread);
+    for (;;);
+
+    crheap_shutdown();
+}
+
+static void *demo_mergesort_tf(void *arg)
+{
+    (void)arg;
+
+    int arr[MERGESORT_LENGTH], i;
+    
+    for (i = 0; i < MERGESORT_LENGTH; i++)
+        arr[i] = abs(rand()) % 100;
+
+    crthread_checkpoint();
+
+    mergesort(arr, MERGESORT_LENGTH);
+
+    return NULL;
+}
+
+void demo_mergesort()
+{
+    struct crthread *thread;
+
+    crheap_init(NULL);
+
+    printf("Starting mergesort demo...\n");
+    if (crheap_get_last_progress() == NV_FIRSTRUN)
+    {
+        thread = crthread_new(demo_mergesort_tf, NULL, 0);
+        crthread_fork(thread);
+    }
+
     for (;;);
 
     crheap_shutdown();

@@ -18,7 +18,8 @@
 
 #define UNIT_TESTING        0
 #define PRIMESIEVE_DEMO     0
-#define FIBONACCI_DEMO      1
+#define FIBONACCI_DEMO      0
+#define MERGESORT_DEMO      1
 
 
 /**
@@ -112,5 +113,9 @@ int main()
 
 #if FIBONACCI_DEMO
     demo_fibonacci();
+#endif
+
+#if MERGESORT_DEMO
+    demo_mergesort();
 #endif
 }

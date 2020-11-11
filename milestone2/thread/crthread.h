@@ -16,7 +16,7 @@
 #include <signal.h>
 
 #define INTERRUPT_GUARD_SIZE    (2 * PTHREAD_STACK_MIN)
-#define DEFAULT_STACKSIZE       ((2 * PTHREAD_STACK_MIN) + INTERRUPT_GUARD_SIZE)
+#define DEFAULT_STACKSIZE       ((8 * PTHREAD_STACK_MIN) + INTERRUPT_GUARD_SIZE)
 
 /* internal crthread handle - used to represent a non-volatile thread */
 struct crthread
